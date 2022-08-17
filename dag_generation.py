@@ -1,9 +1,12 @@
 import networkx as nx
 import random
-from networkx.drawing.nx_pydot import to_pydot
+from networkx.drawing.nx_pydot import to_pydot, write_dot
 
-
-def generate_dag(n_nodes: int, p_edge: float, seed: int = None) -> str:
+def generate_dag(
+        n_nodes: int,
+        p_edge: float,
+        seed: int = None,
+        dot_path: str = None) -> nx.DiGraph:
     """Generate a random DAG with a specified number of nodes and edges.
 
     1. Sample a random Erdos Renyi graph with the specified number of nodes and probability of edges. The nodes in this
@@ -12,7 +15,7 @@ def generate_dag(n_nodes: int, p_edge: float, seed: int = None) -> str:
        a larger numerical label to nodes with a smaller numerical label (e.g. 2 --> 1).
     3. Convert exogenous nodes to inputs, labelling them in ascending order as X1, X2, ..., Xn.
     4. Convert endogenous nodes to output, labelling them in ascending order as Y1, Y2, ..., Yn.
-    5. Return DAG represented in a DOT string.
+    5. Return a networkx directed graph representing the causal DAG.
 
     Example output for generate_dag(n_nodes=3, p_edge=0.8):
 
@@ -24,9 +27,11 @@ def generate_dag(n_nodes: int, p_edge: float, seed: int = None) -> str:
         X2 -> Y1;
         }
 
+
     :param n_nodes: The number of nodes the DAG should contain.
     :param p_edge: The probability of edge creation.
     :param seed: An optional random seed.
+    :param dot_path: An optional path to save a DOT file.
     return: A string containing a DOT causal DAG.
     """
     if seed:
@@ -58,9 +63,11 @@ def generate_dag(n_nodes: int, p_edge: float, seed: int = None) -> str:
     node_map = input_node_map | output_node_map
     input_output_causal_dag = nx.relabel_nodes(causal_dag, node_map)
 
-    # Convert DAG to DOT string
-    dot_input_output_causal_dag = to_pydot(input_output_causal_dag).to_string()
-    return dot_input_output_causal_dag
+    if dot_path:
+        dot_input_output_causal_dag = to_pydot(input_output_causal_dag).to_string()
+        write_dot(dot_input_output_causal_dag, dot_path)
+
+    return input_output_causal_dag
 
 
 def get_exogenous_nodes(graph: nx.DiGraph):
@@ -73,5 +80,4 @@ def get_exogenous_nodes(graph: nx.DiGraph):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(3, 0.8)
-    print(dag)
+    dag = generate_dag(20, 0.5)
