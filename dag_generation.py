@@ -3,11 +3,26 @@ import random
 from networkx.drawing.nx_pydot import to_pydot
 
 
-def generate_dag(
-        n_nodes: int,
-        p_edge: float,
-        seed: int = None) -> str:
+def generate_dag(n_nodes: int, p_edge: float, seed: int = None) -> str:
     """Generate a random DAG with a specified number of nodes and edges.
+
+    1. Sample a random Erdos Renyi graph with the specified number of nodes and probability of edges. The nodes in this
+       graph are labelled in ascending numerical order.
+    2. Convert the Erdos Renyi graph to a directed graph and remove cycles by deleting edges that point from nodes with
+       a larger numerical label to nodes with a smaller numerical label (e.g. 2 --> 1).
+    3. Convert exogenous nodes to inputs, labelling them in ascending order as X1, X2, ..., Xn.
+    4. Convert endogenous nodes to output, labelling them in ascending order as Y1, Y2, ..., Yn.
+    5. Return DAG represented in a DOT string.
+
+    Example output for generate_dag(n_nodes=3, p_edge=0.8):
+
+        strict digraph  {
+        X1;
+        Y1;
+        X2;
+        X1 -> Y1;
+        X2 -> Y1;
+        }
 
     :param n_nodes: The number of nodes the DAG should contain.
     :param p_edge: The probability of edge creation.
@@ -21,11 +36,15 @@ def generate_dag(
     erdos_renyi_graph = nx.erdos_renyi_graph(n_nodes, p_edge, directed=True)
 
     # Convert the Erdos-Renyi graph to a directed graph and remove cycles
-    causal_dag = nx.DiGraph((cause, effect) for cause, effect in erdos_renyi_graph.edges() if cause < effect)
+    causal_dag = nx.DiGraph(
+        (cause, effect) for cause, effect in erdos_renyi_graph.edges() if cause < effect
+    )
 
     # Identify any deleted nodes and add to causal DAG as an isolated node
     # We will treat such nodes as inputs with no effect
-    isolated_nodes = [node for node in erdos_renyi_graph.nodes if node not in causal_dag.nodes]
+    isolated_nodes = [
+        node for node in erdos_renyi_graph.nodes if node not in causal_dag.nodes
+    ]
     causal_dag.add_nodes_from(isolated_nodes)
 
     # Identify input nodes (exogenous) and output nodes (endogenous)
@@ -54,5 +73,5 @@ def get_exogenous_nodes(graph: nx.DiGraph):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(10, 0.5)
+    dag = generate_dag(3, 0.8)
     print(dag)
