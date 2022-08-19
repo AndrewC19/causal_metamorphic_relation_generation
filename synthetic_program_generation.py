@@ -106,7 +106,7 @@ def construct_statement_stack_from_outputs_and_dag(
         pset.addPrimitive(operator.add, 2)
         pset.addPrimitive(operator.mul, 2)
         pset.addPrimitive(operator.sub, 2)
-        for _ in range(int(len(causes)/5 + 1)):
+        for _ in range(int(len(causes) / 5 + 1)):
             pset.addTerminal(randint(-10, 10))
 
         # Convert variable names to those in DAG
@@ -172,10 +172,10 @@ def synthetic_statement_fitness(individual, causes, pset):
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
     if not missing_causes:
-        return 0.0,
+        return (0.0,)
     else:
         # We want the smallest statement that contains all variables
-        return 1.0 / len(causes_in_statement),
+        return (1.0 / len(causes_in_statement),)
 
 
 def write_statement_stack_to_python_file(
@@ -211,21 +211,23 @@ def write_statement_stack_to_python_file(
 def format_program_statements(program_statements):
     """Convert a list of arithmetic program statements from prefix to infix notation.
 
-        For example:
-            (1) [mul(5, Y3), mul(add(X2, X2), add(-8, X3))] --> [5*Y3, (X2+X2)*(-8+X3)]
-            (2) [add(X1, X1), sub(mul(Y3, -4), sub(Y4, -4))] --> [X1+X1, (Y3*-4)-(Y4--4)]
+    For example:
+        (1) [mul(5, Y3), mul(add(X2, X2), add(-8, X3))] --> [5*Y3, (X2+X2)*(-8+X3)]
+        (2) [add(X1, X1), sub(mul(Y3, -4), sub(Y4, -4))] --> [X1+X1, (Y3*-4)-(Y4--4)]
 
-        :param program_statements: A list of strings representing arithmetic statements in prefix form.
-        :return: A list of strings representing equivalent arithmetic statements in infix form.
-        """
+    :param program_statements: A list of strings representing arithmetic statements in prefix form.
+    :return: A list of strings representing equivalent arithmetic statements in infix form.
+    """
     content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
-    identifier = pp.Word('_' + pp.alphas, '_' + pp.alphanums)
-    parens = identifier("name") + pp.nestedExpr('(', ')', content=content)
+    identifier = pp.Word("_" + pp.alphas, "_" + pp.alphanums)
+    parens = identifier("name") + pp.nestedExpr("(", ")", content=content)
     formatted_program_statements = []
     for output, program_statement in program_statements:
         program_statement = parens.parseString(str(program_statement)).asList()
         formatted_program_statement = prefix_statement_list_to_infix(program_statement)
-        formatted_program_statements.append(f"\t{output} = {formatted_program_statement}\n")
+        formatted_program_statements.append(
+            f"\t{output} = {formatted_program_statement}\n"
+        )
     return formatted_program_statements
 
 
@@ -240,18 +242,20 @@ def prefix_statement_list_to_infix(statement_list):
     :return: A string representing an equivalent arithmetic statement in infix form.
     """
     statement_str = ""
-    for i in range(len(statement_list)-1):
+    for i in range(len(statement_list) - 1):
 
         # Base case: list of arguments e.g. ['X1', ',', 'X2'] --> "X1,X2"
-        if (not isinstance(statement_list[i], list)) and (not isinstance(statement_list[i+1], list)):
+        if (not isinstance(statement_list[i], list)) and (
+            not isinstance(statement_list[i + 1], list)
+        ):
             statement_str += "".join(statement_list)
             return statement_str
 
         # Case: multiple functions in list e.g. ['add', ['X3', ',', 'X3'], ',', 'mul', ['Y3', ',', 'Y5']]
         elif len(statement_list) > 2:  # Multiple statements to evaluate
-            delimiter_index = statement_list.index(',')
+            delimiter_index = statement_list.index(",")
             left_args = statement_list[:delimiter_index]
-            right_args = statement_list[delimiter_index+1:]
+            right_args = statement_list[delimiter_index + 1 :]
             statement_str += f"({prefix_statement_list_to_infix(left_args)}),"
             statement_str += f"({prefix_statement_list_to_infix(right_args)})"
             return statement_str
@@ -260,7 +264,7 @@ def prefix_statement_list_to_infix(statement_list):
         else:
             print(statement_list)
             functor = statement_list[i]
-            args = statement_list[i+1]
+            args = statement_list[i + 1]
 
             if functor == "add":
                 replacement_operator = "+"
@@ -272,7 +276,9 @@ def prefix_statement_list_to_infix(statement_list):
                 replacement_operator = "/"
 
             # Recurse onto next list and replace ',' with operator
-            statement_str += f"{prefix_statement_list_to_infix(args)}".replace(',', replacement_operator)
+            statement_str += f"{prefix_statement_list_to_infix(args)}".replace(
+                ",", replacement_operator
+            )
     return statement_str
 
 
