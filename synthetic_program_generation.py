@@ -1,5 +1,7 @@
 import operator
 import networkx as nx
+import pyparsing as pp
+from random import randint
 from deap.gp import (
     PrimitiveSet,
     PrimitiveTree,
@@ -104,6 +106,8 @@ def construct_statement_stack_from_outputs_and_dag(
         pset.addPrimitive(operator.add, 2)
         pset.addPrimitive(operator.mul, 2)
         pset.addPrimitive(operator.sub, 2)
+        for _ in range(int(len(causes)/5 + 1)):
+            pset.addTerminal(randint(-10, 10))
 
         # Convert variable names to those in DAG
         cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
@@ -140,7 +144,7 @@ def construct_statement_stack_from_outputs_and_dag(
         toolbox.register("mutate", mutUniform, expr=toolbox.expr_mut, pset=pset)
 
         # Create the population and hall of fame to store the best solution
-        pop = toolbox.population(n=10)
+        pop = toolbox.population(n=1000)
         hof = tools.HallOfFame(1)
 
         # Run the evolutionary algorithm and select the best solution
@@ -168,10 +172,10 @@ def synthetic_statement_fitness(individual, causes, pset):
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
     if not missing_causes:
-        return (0.0,)
+        return 0.0,
     else:
         # We want the smallest statement that contains all variables
-        return (1.0 / len(causes_in_statement),)
+        return 1.0 / len(causes_in_statement),
 
 
 def write_statement_stack_to_python_file(
@@ -185,7 +189,6 @@ def write_statement_stack_to_python_file(
     :param causal_dag: The causal DAG whose structure the program should match.
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
-    imports_str = "from operator import add, mul, sub\n\n\n"
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
     doc_str = '\t"""Causal structure:\n'
@@ -195,18 +198,84 @@ def write_statement_stack_to_python_file(
         "\treturn " + "".join([f"{y}, " for y in sorted_output_nodes])[:-2] + "\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
-    program_statements = [
-        f"\t{output} = {statement}\n" for output, statement in statement_stack
-    ]
+    formatted_program_statements = format_program_statements(statement_stack)
+    print(formatted_program_statements)
 
     with open(f"./synthetic_programs/{program_name}.py", "w") as program_file:
-        program_file.write(imports_str)
         program_file.write(method_definition_str)
         program_file.write(doc_str)
-        program_file.writelines(program_statements)
+        program_file.writelines(formatted_program_statements)
         program_file.write(return_str)
 
 
+def format_program_statements(program_statements):
+    """Convert a list of arithmetic program statements from prefix to infix notation.
+
+        For example:
+            (1) [mul(5, Y3), mul(add(X2, X2), add(-8, X3))] --> [5*Y3, (X2+X2)*(-8+X3)]
+            (2) [add(X1, X1), sub(mul(Y3, -4), sub(Y4, -4))] --> [X1+X1, (Y3*-4)-(Y4--4)]
+
+        :param program_statements: A list of strings representing arithmetic statements in prefix form.
+        :return: A list of strings representing equivalent arithmetic statements in infix form.
+        """
+    content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
+    identifier = pp.Word('_' + pp.alphas, '_' + pp.alphanums)
+    parens = identifier("name") + pp.nestedExpr('(', ')', content=content)
+    formatted_program_statements = []
+    for output, program_statement in program_statements:
+        program_statement = parens.parseString(str(program_statement)).asList()
+        formatted_program_statement = prefix_statement_list_to_infix(program_statement)
+        formatted_program_statements.append(f"\t{output} = {formatted_program_statement}\n")
+    return formatted_program_statements
+
+
+def prefix_statement_list_to_infix(statement_list):
+    """Convert an arithmetic program statement (in nested list format) from prefix to infix notation.
+
+    For example:
+        (1) ['mul', ['5', ',', 'Y3']] --> 5*Y3
+        (2) ['mul', ['add', ['X2', ',', 'X2'], ',', 'add', ['-', '8', ',', 'X3']]] --> (X2+X2)*(-8+X3)
+
+    :param statement_list: An arithmetic statement in prefix form specified as a nested list.
+    :return: A string representing an equivalent arithmetic statement in infix form.
+    """
+    statement_str = ""
+    for i in range(len(statement_list)-1):
+
+        # Base case: list of arguments e.g. ['X1', ',', 'X2'] --> "X1,X2"
+        if (not isinstance(statement_list[i], list)) and (not isinstance(statement_list[i+1], list)):
+            statement_str += "".join(statement_list)
+            return statement_str
+
+        # Case: multiple functions in list e.g. ['add', ['X3', ',', 'X3'], ',', 'mul', ['Y3', ',', 'Y5']]
+        elif len(statement_list) > 2:  # Multiple statements to evaluate
+            delimiter_index = statement_list.index(',')
+            left_args = statement_list[:delimiter_index]
+            right_args = statement_list[delimiter_index+1:]
+            statement_str += f"({prefix_statement_list_to_infix(left_args)}),"
+            statement_str += f"({prefix_statement_list_to_infix(right_args)})"
+            return statement_str
+
+        # Case: top-level function e.g. ['mul', ['add', ['X2', ',', 'X2'], ',', 'add', ['-', '8', ',', 'X3']]]
+        else:
+            print(statement_list)
+            functor = statement_list[i]
+            args = statement_list[i+1]
+
+            if functor == "add":
+                replacement_operator = "+"
+            elif functor == "sub":
+                replacement_operator = "-"
+            elif functor == "mul":
+                replacement_operator = "*"
+            else:
+                replacement_operator = "/"
+
+            # Recurse onto next list and replace ',' with operator
+            statement_str += f"{prefix_statement_list_to_infix(args)}".replace(',', replacement_operator)
+    return statement_str
+
+
 if __name__ == "__main__":
-    dag = generate_dag(15, 0.2)
+    dag = generate_dag(10, 0.2)
     generate_program(dag, "synthetic_program")
