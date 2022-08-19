@@ -1,7 +1,8 @@
 import operator
 import networkx as nx
 import pyparsing as pp
-from random import randint
+import random
+import re
 from deap.gp import (
     PrimitiveSet,
     PrimitiveTree,
@@ -12,7 +13,8 @@ from deap.gp import (
 )
 from deap import creator, base, tools, algorithms
 from dag_generation import generate_dag
-from typing import List
+from typing import List, Iterable
+from math import ceil
 
 
 def generate_program(causal_dag: nx.DiGraph, program_name: str):
@@ -58,7 +60,7 @@ def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
 
 
 def construct_statement_stack_from_outputs_and_dag(
-    output_nodes: List, causal_dag: nx.DiGraph
+    output_nodes: List, causal_dag: nx.DiGraph, constants_ratio: float = 0.2
 ):
     """Construct a stack of statements for each output in the causal DAG, with the same causal structure.
 
@@ -77,6 +79,7 @@ def construct_statement_stack_from_outputs_and_dag(
     :param output_nodes: A list of outputs that appear in the causal DAG.
     :param causal_dag: A networkx DiGraph representing a causal DAG from which the structure of the program will be
                        inferred.
+    :param constants_ratio: Ratio of constants to variables to add to target (0.2 by default).
     :return: A list of syntax trees (PrimitiveTrees) representing statements that can be executed in python.
     """
     terminal_output_nodes = [
@@ -106,8 +109,15 @@ def construct_statement_stack_from_outputs_and_dag(
         pset.addPrimitive(operator.add, 2)
         pset.addPrimitive(operator.mul, 2)
         pset.addPrimitive(operator.sub, 2)
-        for _ in range(int(len(causes) / 5 + 1)):
-            pset.addTerminal(randint(-10, 10))
+
+        # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
+        for x in range(ceil(constants_ratio * len(causes))):
+            pset.addEphemeralConstant(
+                f"negative_const_{output_node}_{x}", lambda: random.randint(-50, -1)
+            )
+            pset.addEphemeralConstant(
+                f"positive_const_{output_node}_{x}", lambda: random.randint(1, 50)
+            )
 
         # Convert variable names to those in DAG
         cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
@@ -120,7 +130,7 @@ def construct_statement_stack_from_outputs_and_dag(
 
         # Grow trees with a depth bounded by [(#causes/2)+1, #causes] -- this follows from the fact that our primitives
         # are all binary (take two args). Hence, to ensure all causes are included in the function, the tree must have
-        # at least causes/2 primitives.
+        # at least causes/2 binary primitives, requiring a depth of the same value. # TODO: Check this.
         toolbox = base.Toolbox()
         toolbox.register(
             "expr",
@@ -140,7 +150,7 @@ def construct_statement_stack_from_outputs_and_dag(
         )
         toolbox.register("select", tools.selTournament, tournsize=3)
         toolbox.register("mate", cxOnePoint)
-        toolbox.register("expr_mut", genFull, min_=0, max_=2)
+        toolbox.register("expr_mut", genFull, min_=1, max_=2)
         toolbox.register("mutate", mutUniform, expr=toolbox.expr_mut, pset=pset)
 
         # Create the population and hall of fame to store the best solution
@@ -149,15 +159,14 @@ def construct_statement_stack_from_outputs_and_dag(
 
         # Run the evolutionary algorithm and select the best solution
         _, _ = algorithms.eaSimple(
-            pop, toolbox, 0.5, 0.1, 40, halloffame=hof, verbose=True
+            pop, toolbox, 0.5, 0.1, 40, halloffame=hof, verbose=False
         )
-        print(f"{output_node} is caused by: {causes}")
         statement_stack.append((output_node, PrimitiveTree(hof[0])))
     return statement_stack
 
 
 def synthetic_statement_fitness(individual, causes, pset):
-    """A good statement is one that includes all of its causes.
+    """A good statement is one that includes all of its causes, is short, and does not contain self subtraction.
 
     :param individual: A syntax tree representing the statement.
     :param causes: A list of the causes that must feature in the statement.
@@ -171,11 +180,23 @@ def synthetic_statement_fitness(individual, causes, pset):
 
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
-    if not missing_causes:
-        return (0.0,)
-    else:
-        # We want the smallest statement that contains all variables
-        return (1.0 / len(causes_in_statement),)
+
+    # Remove solutions that do not contain all causes
+    if missing_causes:
+        return (1.0,)
+
+    # Remove solutions that include self subtraction
+    if contains_self_division(individual):
+        return (1.0,)
+
+    # We want the smallest statement that contains all variables
+    return (1.0 - (1.0 / len(causes_in_statement)),)
+
+
+def contains_self_division(statement):
+    subtract_parameters = re.search(r"sub\((\b\w  +\b),\s(\b\1\b)\)", str(statement))
+    if subtract_parameters:
+        return True
 
 
 def write_statement_stack_to_python_file(
@@ -218,11 +239,14 @@ def format_program_statements(program_statements):
     :param program_statements: A list of strings representing arithmetic statements in prefix form.
     :return: A list of strings representing equivalent arithmetic statements in infix form.
     """
+    print(program_statements)
     content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
     identifier = pp.Word("_" + pp.alphas, "_" + pp.alphanums)
     parens = identifier("name") + pp.nestedExpr("(", ")", content=content)
     formatted_program_statements = []
     for output, program_statement in program_statements:
+        print(output)
+        print(program_statement)
         program_statement = parens.parseString(str(program_statement)).asList()
         formatted_program_statement = prefix_statement_list_to_infix(program_statement)
         formatted_program_statements.append(
@@ -242,46 +266,56 @@ def prefix_statement_list_to_infix(statement_list):
     :return: A string representing an equivalent arithmetic statement in infix form.
     """
     statement_str = ""
-    for i in range(len(statement_list) - 1):
 
-        # Base case: list of arguments e.g. ['X1', ',', 'X2'] --> "X1,X2"
-        if (not isinstance(statement_list[i], list)) and (
-            not isinstance(statement_list[i + 1], list)
-        ):
-            statement_str += "".join(statement_list)
-            return statement_str
+    # Base case: bottom level list or terminal
+    if does_not_contain_list(statement_list):
+        return "".join(statement_list)
 
-        # Case: multiple functions in list e.g. ['add', ['X3', ',', 'X3'], ',', 'mul', ['Y3', ',', 'Y5']]
-        elif len(statement_list) > 2:  # Multiple statements to evaluate
-            delimiter_index = statement_list.index(",")
-            left_args = statement_list[:delimiter_index]
-            right_args = statement_list[delimiter_index + 1 :]
-            statement_str += f"({prefix_statement_list_to_infix(left_args)}),"
-            statement_str += f"({prefix_statement_list_to_infix(right_args)})"
-            return statement_str
+    # Case 1: top level function and its parameters
+    elif len(statement_list) == 2:
+        functor = statement_list[0]
+        args = statement_list[1]
 
-        # Case: top-level function e.g. ['mul', ['add', ['X2', ',', 'X2'], ',', 'add', ['-', '8', ',', 'X3']]]
+        if functor == "add":
+            replacement_operator = "+"
+        elif functor == "sub":
+            replacement_operator = "-"
+        elif functor == "mul":
+            replacement_operator = "*"
         else:
-            print(statement_list)
-            functor = statement_list[i]
-            args = statement_list[i + 1]
+            replacement_operator = "/"
+        return f"{prefix_statement_list_to_infix(args)}".replace(
+            ",", replacement_operator
+        )
 
-            if functor == "add":
-                replacement_operator = "+"
-            elif functor == "sub":
-                replacement_operator = "-"
-            elif functor == "mul":
-                replacement_operator = "*"
-            else:
-                replacement_operator = "/"
+    # Case 2: more than one function
+    else:
+        delimiter_index = statement_list.index(",")
+        left_args = statement_list[:delimiter_index]
+        right_args = statement_list[delimiter_index + 1 :]
+        left_results = prefix_statement_list_to_infix(left_args)
+        right_results = prefix_statement_list_to_infix(right_args)
 
-            # Recurse onto next list and replace ',' with operator
-            statement_str += f"{prefix_statement_list_to_infix(args)}".replace(
-                ",", replacement_operator
-            )
-    return statement_str
+        # If the result is not a terminal, enclose in brackets
+        operators = ["+", "-", "*"]
+        if any(operator_ in left_results for operator_ in operators):
+            left_results = f"({left_results})"
+        if any(operator_ in right_results for operator_ in operators):
+            right_results = f"({right_results})"
+
+    return f"{left_results},{right_results}"
+
+
+def does_not_contain_list(x):
+    if not isinstance(x, Iterable):
+        return True
+
+    for item in x:
+        if isinstance(item, list):
+            return False
+    return True
 
 
 if __name__ == "__main__":
-    dag = generate_dag(10, 0.2)
+    dag = generate_dag(15, 0.2)
     generate_program(dag, "synthetic_program")
