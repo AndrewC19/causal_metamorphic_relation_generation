@@ -3,6 +3,7 @@ import networkx as nx
 import pyparsing as pp
 import random
 import re
+import os
 from deap.gp import (
     PrimitiveSet,
     PrimitiveTree,
@@ -17,11 +18,16 @@ from typing import List, Iterable
 from math import ceil
 
 
-def generate_program(causal_dag: nx.DiGraph, program_name: str):
+def generate_program(
+    causal_dag: nx.DiGraph,
+    target_directory_path: str = "./synthetic_programs",
+    program_name: str = "synthetic_program",
+):
     """Generate an arithmetic python program with the same causal structure as the provided causal DAG.
 
     :param causal_dag: A networkx graph representing a causal DAG. This DAG will be used to produce a python program
                        with the same causal structure.
+    :param target_directory_path: The path of the directory to which the program will be saved.
     :param program_name: The name the program will be saved as (excluding the .py extension).
     """
     input_nodes = [node for node in causal_dag.nodes if "X" in node]
@@ -42,6 +48,7 @@ def generate_program(causal_dag: nx.DiGraph, program_name: str):
         sorted_input_nodes,
         sorted_output_nodes,
         causal_dag,
+        target_directory_path,
         program_name,
     )
 
@@ -113,10 +120,12 @@ def construct_statement_stack_from_outputs_and_dag(
         # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
         for x in range(ceil(constants_ratio * len(causes))):
             pset.addEphemeralConstant(
-                f"negative_const_{output_node}_{x}", lambda: random.randint(-50, -1)
+                f"negative_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
+                lambda: random.randint(-50, -1),
             )
             pset.addEphemeralConstant(
-                f"positive_const_{output_node}_{x}", lambda: random.randint(1, 50)
+                f"positive_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
+                lambda: random.randint(1, 50),
             )
 
         # Convert variable names to those in DAG
@@ -190,7 +199,7 @@ def synthetic_statement_fitness(individual, causes, pset):
         return (1.0,)
 
     # We want the smallest statement that contains all variables
-    return 1.0 - (1.0 / len(causes_in_statement)),
+    return (1.0 - (1.0 / len(causes_in_statement)),)
 
 
 def contains_self_subtraction(statement):
@@ -200,7 +209,12 @@ def contains_self_subtraction(statement):
 
 
 def write_statement_stack_to_python_file(
-    statement_stack, sorted_input_nodes, sorted_output_nodes, causal_dag, program_name
+    statement_stack,
+    sorted_input_nodes,
+    sorted_output_nodes,
+    causal_dag,
+    target_directory_path,
+    program_name,
 ):
     """Convert a statement stack to a python program and save under the synthetic_programs directory.
 
@@ -208,6 +222,7 @@ def write_statement_stack_to_python_file(
     :param sorted_input_nodes: A list of inputs sorted in ascending numerical order (i.e. X1, X2, X3 ...)
     :param sorted_output_nodes: A list of outputs sorted in ascending numerical order (i.e. Y1, Y2, Y3 ...)
     :param causal_dag: The causal DAG whose structure the program should match.
+    :param target_directory_path: The directory to which the program will be saved.
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
@@ -220,9 +235,10 @@ def write_statement_stack_to_python_file(
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
     formatted_program_statements = format_program_statements(statement_stack)
-    print(formatted_program_statements)
 
-    with open(f"./synthetic_programs/{program_name}.py", "w") as program_file:
+    with safe_open_w(
+        os.path.join(target_directory_path, f"{program_name}.py")
+    ) as program_file:
         program_file.write(method_definition_str)
         program_file.write(doc_str)
         program_file.writelines(formatted_program_statements)
@@ -239,14 +255,11 @@ def format_program_statements(program_statements):
     :param program_statements: A list of strings representing arithmetic statements in prefix form.
     :return: A list of strings representing equivalent arithmetic statements in infix form.
     """
-    print(program_statements)
     content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
     identifier = pp.Word("_" + pp.alphas, "_" + pp.alphanums)
     parens = identifier("name") + pp.nestedExpr("(", ")", content=content)
     formatted_program_statements = []
     for output, program_statement in program_statements:
-        print(output)
-        print(program_statement)
         program_statement = parens.parseString(str(program_statement)).asList()
         formatted_program_statement = prefix_statement_list_to_infix(program_statement)
         formatted_program_statements.append(
@@ -316,6 +329,20 @@ def does_not_contain_list(x):
     return True
 
 
+def safe_open_w(path):
+    """Open path for writing and create directories if they do not exist.
+
+    Original implementation: https://stackoverflow.com/questions/23793987/write-file-to-a-directory-that-doesnt-exist
+    Author: Jonathon Reinhart
+
+    :param path: A path to the target directory. This may not exist yet.
+    :return: An open path to be written to.
+    """
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return open(path, "w")
+
+
 if __name__ == "__main__":
     dag = generate_dag(15, 0.2)
-    generate_program(dag, "synthetic_program")
+    generate_program(dag, target_directory_path="./evaluation/", program_name="program")

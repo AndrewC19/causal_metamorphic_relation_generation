@@ -2,11 +2,10 @@ import networkx as nx
 import random
 from networkx.drawing.nx_pydot import to_pydot, write_dot
 
+
 def generate_dag(
-        n_nodes: int,
-        p_edge: float,
-        seed: int = None,
-        dot_path: str = None) -> nx.DiGraph:
+    n_nodes: int, p_edge: float, seed: int = None, dot_path: str = None
+) -> nx.DiGraph:
     """Generate a random DAG with a specified number of nodes and edges.
 
     1. Sample a random Erdos Renyi graph with the specified number of nodes and probability of edges. The nodes in this
