@@ -49,7 +49,7 @@ def write_params(
     with safe_open_w(path) as params_file:
         params_file.writelines(
             [
-                f"Experiment Name: {experiment_name}\n",
+                f"Experiment name: {experiment_name}\n",
                 f"Number of DAGs generated: {n_dags}\n",
                 f"Number of nodes per dag: {n_nodes}\n",
                 f"Probability of including an edge between any pair of nodes in the DAG: {p_edge}\n",
