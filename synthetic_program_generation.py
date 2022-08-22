@@ -186,14 +186,14 @@ def synthetic_statement_fitness(individual, causes, pset):
         return (1.0,)
 
     # Remove solutions that include self subtraction
-    if contains_self_division(individual):
+    if contains_self_subtraction(individual):
         return (1.0,)
 
     # We want the smallest statement that contains all variables
-    return (1.0 - (1.0 / len(causes_in_statement)),)
+    return 1.0 - (1.0 / len(causes_in_statement)),
 
 
-def contains_self_division(statement):
+def contains_self_subtraction(statement):
     subtract_parameters = re.search(r"sub\((\b\w  +\b),\s(\b\1\b)\)", str(statement))
     if subtract_parameters:
         return True
