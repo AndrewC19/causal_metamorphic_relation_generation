@@ -1,6 +1,7 @@
 import networkx as nx
 import random
 from networkx.drawing.nx_pydot import to_pydot, write_dot
+from helpers import safe_open_w
 
 
 def generate_dag(
@@ -63,8 +64,9 @@ def generate_dag(
     input_output_causal_dag = nx.relabel_nodes(causal_dag, node_map)
 
     if dot_path:
-        dot_input_output_causal_dag = to_pydot(input_output_causal_dag).to_string()
-        write_dot(dot_input_output_causal_dag, dot_path)
+        with safe_open_w(dot_path) as dag_file:
+            dot_input_output_causal_dag = to_pydot(input_output_causal_dag).to_string()
+            dag_file.write(dot_input_output_causal_dag)
 
     return input_output_causal_dag
 

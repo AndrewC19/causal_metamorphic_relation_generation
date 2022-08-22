@@ -1,0 +1,4 @@
+Experiment Name: experiment_example
+Number of DAGs generated: 5
+Number of nodes per dag: 15
+Probability of including an edge between any pair of nodes in the DAG: 0.2

@@ -16,6 +16,7 @@ from deap import creator, base, tools, algorithms
 from dag_generation import generate_dag
 from typing import List, Iterable
 from math import ceil
+from helpers import safe_open_w
 
 
 def generate_program(
@@ -278,7 +279,6 @@ def prefix_statement_list_to_infix(statement_list):
     :param statement_list: An arithmetic statement in prefix form specified as a nested list.
     :return: A string representing an equivalent arithmetic statement in infix form.
     """
-    statement_str = ""
 
     # Base case: bottom level list or terminal
     if does_not_contain_list(statement_list):
@@ -327,20 +327,6 @@ def does_not_contain_list(x):
         if isinstance(item, list):
             return False
     return True
-
-
-def safe_open_w(path):
-    """Open path for writing and create directories if they do not exist.
-
-    Original implementation: https://stackoverflow.com/questions/23793987/write-file-to-a-directory-that-doesnt-exist
-    Author: Jonathon Reinhart
-
-    :param path: A path to the target directory. This may not exist yet.
-    :return: An open path to be written to.
-    """
-
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    return open(path, "w")
 
 
 if __name__ == "__main__":
