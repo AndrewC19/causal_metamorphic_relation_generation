@@ -227,12 +227,13 @@ def write_statement_stack_to_python_file(
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
+    input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
     doc_str = '\t"""Causal structure:\n'
     doc_str += "".join([f"\t\t{edge}\n" for edge in causal_dag.edges])
     doc_str += '\t"""\n'
     return_str = (
-        "\treturn " + "".join([f"{y}, " for y in sorted_output_nodes])[:-2] + "\n"
+        "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
     formatted_program_statements = format_program_statements(statement_stack)
@@ -264,7 +265,7 @@ def format_program_statements(program_statements):
         program_statement = parens.parseString(str(program_statement)).asList()
         formatted_program_statement = prefix_statement_list_to_infix(program_statement)
         formatted_program_statements.append(
-            f"\t{output} = {formatted_program_statement}\n"
+            f"\t if {output} is not None:\n\t\t{output} = {formatted_program_statement}\n"
         )
     return formatted_program_statements
 

@@ -1,12 +1,11 @@
 import random
 from argparse import ArgumentParser
 from dag_generation import generate_dag
-from synthetic_program_generation import generate_program
+from program_generation import generate_program
 from helpers import safe_open_w
 
-
 def generate_experiment(
-    n_dags: int, n_nodes: int, p_edge: float, experiment_name: str = "experiment"
+    n_dags: int, n_nodes: int, p_edge: float, experiment_name: str = "experiment", seed: int = 0
 ):
     """Generate an experiment with user specified DAGs.
 
@@ -21,6 +20,7 @@ def generate_experiment(
     """
     experiment_directory = f"./evaluation/{experiment_name}/"
     params_path = f"{experiment_directory}/params.txt"
+    random.seed(seed)
     for n in range(n_dags):
         seed = random.randint(1, 100000)
         random.seed(seed)
@@ -70,12 +70,14 @@ if __name__ == "__main__":
         type=float,
     )
     parser.add_argument("-en", "--experiment", help="Name of the experiment", type=str)
+    parser.add_argument("-s", "--seed", help="Random seed", type=int)
 
     args = parser.parse_args()
     number_of_dags = 1
     number_of_nodes = 10
     probability_of_edge = 0.2
     experiment_name = "experiment_1"
+    seed = 0
     if args.dags:
         number_of_dags = args.dags
     if args.nodes:
@@ -84,10 +86,13 @@ if __name__ == "__main__":
         probability_of_edge = args.edges
     if args.experiment:
         experiment_name = args.experiment
+    if args.seed:
+        seed = args.seed
 
     generate_experiment(
         number_of_dags,
         number_of_nodes,
         probability_of_edge,
         experiment_name=experiment_name,
+        seed=seed
     )
