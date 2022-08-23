@@ -12,33 +12,30 @@ from causal_testing.specification.causal_dag import CausalDAG
 
 
 def metamorphic_tests(
-    independence: ConditionalIndependence, scenario: Scenario, confidence: float = 0.95, sample_size: int = 30, seed=0
+    independence: ConditionalIndependence, scenario: Scenario, confidence: float = 0.95, sample_size: int = 5, seed=0
 ):
-    X = sorted(list(scenario.variables))
-    X_prime = [scenario.treatment_variables[x].name for x in X]
-    columns = X + X_prime
+    X = independence.X
+    X_prime = scenario.treatment_variables[X].name
+    columns = list(independence.Z) + [X, X_prime]
     samples = pd.DataFrame(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
         columns=columns,
     )
     print(samples)
-    print(samples.columns)
-    for col in X:
+    for col in columns[:-1]:
         samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
-    for col in X:
-        col_prime = scenario.treatment_variables[col].name
-        samples[col_prime] = lhsmdu.inverseTransformSample(
-            scenario.treatment_variables[col].distribution, samples[col_prime]
-        )
+    samples[X_prime] = lhsmdu.inverseTransformSample(
+        scenario.treatment_variables[X].distribution, samples[X_prime]
+    )
     print(samples)
     x_values = samples[X]
-    x_prime_values = {x[:-1]: v for x, v in samples[X_prime].items()}
+    x_prime_values = samples[X_prime]
     Z_values = samples[independence.Z]
     # assert len(x_values) == len(x_prime_values) == len(Z_values)
     return list(
         zip(
             pd.DataFrame(x_values).to_dict(orient="records"),
-            pd.DataFrame(x_prime_values).to_dict(orient="records"),
+            [{X: x} for x in x_prime_values],
             Z_values.to_dict(orient="records"),
             [independence.Y] * len(x_values),
             [independence] * len(x_values)
@@ -71,10 +68,7 @@ scenario.setup_treatment_variables()
 
 @pytest.mark.parametrize("run", construct_test_suite(independences, scenario))
 def test_independence(run):
-    print(run)
     x_value, x_prime_value, z_values, y, independence = run
-    print(run)
-    print(independence.Y)
     control = program(**(x_value | z_values))[y]
     treatment = program(**(x_prime_value | z_values))[y]
     assert control == treatment, f"Expected control {control} to equal treatment {treatment}"
