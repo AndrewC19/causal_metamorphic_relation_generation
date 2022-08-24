@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 import lhsmdu
 import pytest
 import pandas as pd
@@ -20,8 +20,8 @@ def count(lst):
         counts[item] += 1
     return counts
 
-def metamorphic_tests(
-    independence: ConditionalIndependence, scenario: Scenario, confidence: float = 0.95, sample_size: int = 1, seed=0
+def independence_metamorphic_tests(
+    independence: ConditionalIndependence, scenario: Scenario, sample_size: int = 1, seed=0
 ):
     print(independence)
     X = independence.X
@@ -62,11 +62,49 @@ def metamorphic_tests(
     )
 
 
-def construct_test_suite(independences: List[ConditionalIndependence], scenario: Scenario):
+def construct_independence_test_suite(independences: List[ConditionalIndependence], scenario: Scenario):
     test_suite = []
     for independence in independences:
-        print(metamorphic_tests(independence, scenario))
-        test_suite += metamorphic_tests(independence, scenario)
+        test_suite += independence_metamorphic_tests(independence, scenario)
+    return test_suite
+
+
+def dependence_metamorphic_tests(
+    edge: Tuple[str, str], scenario: Scenario, sample_size: int = 1, seed=0
+):
+    X = edge[0]
+    X_prime = scenario.treatment_variables[X].name.replace("'", "_prime")
+    inputs = list(set([v.name for v in scenario.variables.values() if isinstance(v, Input) and v.name != X]))
+    assert X not in inputs, f"{X} should NOT be in {inputs}"
+    columns = inputs + [X] + [X_prime]
+    assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
+    assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
+    samples = pd.DataFrame(
+        lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
+        columns=columns,
+    )
+    print(samples)
+    for col in columns[:-1]:
+        samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
+    samples[X_prime] = lhsmdu.inverseTransformSample(scenario.treatment_variables[X].distribution, samples[X_prime])
+    X_values = samples[[X]]
+    X_prime_values = samples[[X_prime]]
+    other_inputs = samples[inputs]
+    return list(
+        zip(
+            X_values.to_dict(orient="records"),
+            [{k.replace("_prime", ""): v for k, v in values.items()} for values in X_prime_values.to_dict(orient="records")],
+            other_inputs.to_dict(orient="records"),
+            [edge[1]] * len(X_values),
+            [edge] * len(X_values)
+        )
+    )
+
+
+def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scenario):
+    test_suite = []
+    for edge in edges:
+        test_suite += dependence_metamorphic_tests(edge, scenario)
     return test_suite
 
 
@@ -81,8 +119,14 @@ independences = [i for i in independences if not i.Y.startswith("X")]
 scenario = Scenario(set(variables))
 scenario.setup_treatment_variables()
 
+@pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
+def test_dependence(run):
+    x_value, x_prime_value, other_inputs, y, independence = run
+    control = program(**(other_inputs | x_value))[y]
+    treatment = program(**(other_inputs | x_prime_value))[y]
+    assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment}"
 
-@pytest.mark.parametrize("run", construct_test_suite(independences, scenario))
+@pytest.mark.parametrize("run", construct_independence_test_suite(independences, scenario))
 def test_independence(run):
     x_value, x_prime_value, z_values, y, independence = run
     control = program(**(x_value | z_values))[y]
