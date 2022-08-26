@@ -2,7 +2,9 @@ import random
 from argparse import ArgumentParser
 from dag_generation import generate_dag
 from program_generation import generate_program
+from mutation_config_generation import generate_causal_mutation_config
 from helpers import safe_open_w
+
 
 def generate_experiment(
     n_dags: int, n_nodes: int, p_edge: float, experiment_name: str = "experiment", seed: int = 0
@@ -26,12 +28,18 @@ def generate_experiment(
         random.seed(seed)
         dag_path = f"{experiment_directory}/seed_{seed}"
         dot_path = f"{dag_path}/DAG.dot"
+        mutation_path = f"{dag_path}/mutation_config.toml"
         dag = generate_dag(n_nodes, p_edge, seed=seed, dot_path=dot_path)
         generate_program(
             dag,
             target_directory_path=dag_path,
             program_name="program",
         )
+        generate_causal_mutation_config(
+            dag,
+            target_directory_path=mutation_path,
+        )
+
     write_params(params_path, n_dags, n_nodes, p_edge, experiment_name)
 
 
