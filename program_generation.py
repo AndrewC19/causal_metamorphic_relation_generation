@@ -265,7 +265,7 @@ def format_program_statements(program_statements):
         program_statement = parens.parseString(str(program_statement)).asList()
         formatted_program_statement = prefix_statement_list_to_infix(program_statement)
         formatted_program_statements.append(
-            f"\t if {output} is not None:\n\t\t{output} = {formatted_program_statement}\n"
+            f"\tif {output} is not None:\n\t\t{output} = {formatted_program_statement}\n"
         )
     return formatted_program_statements
 
