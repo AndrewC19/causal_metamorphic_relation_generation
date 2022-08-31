@@ -1,9 +1,11 @@
+from pathlib import Path
 from typing import List, Tuple
+from importlib import import_module
+import argparse
 import lhsmdu
 import pytest
 import pandas as pd
 from scipy.stats import uniform
-from program import program
 
 from causal_testing.specification.conditional_independence import ConditionalIndependence
 from causal_testing.specification.scenario import Scenario
@@ -11,6 +13,20 @@ from causal_testing.specification.variable import Input, Output
 from causal_testing.specification.causal_dag import CausalDAG
 
 pd.set_option('display.max_columns', 500)
+
+
+def get_dir_path() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Parses args"
+    )
+    parser.add_argument('-p',
+                        '--path',
+                        help="Path to seed directory containing DAG.dot and program.py",
+                        required=True,
+                        )
+    args = parser.parse_args()
+    return args.path
+
 
 def count(lst):
     counts = {}
@@ -116,7 +132,10 @@ def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scen
     return test_suite
 
 
-dag = CausalDAG("DAG.dot")
+dir_path = get_dir_path()
+dir_module_path = dir_path + ".program"
+program = import_module(dir_module_path)
+dag = CausalDAG(Path(dir_path) / "DAG.dot")
 
 variables = [Input(x, float, uniform(0, 10)) for x in dag.graph.nodes if x.startswith("X")]
 variables += [Output(y, float, uniform(0, 10)) for y in dag.graph.nodes if y.startswith("Y")]
