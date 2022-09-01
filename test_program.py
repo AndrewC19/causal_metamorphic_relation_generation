@@ -3,8 +3,10 @@ from typing import List, Tuple
 from importlib import import_module
 import argparse
 import lhsmdu
+import re
 import pytest
 import pandas as pd
+
 from scipy.stats import uniform
 
 from causal_testing.specification.conditional_independence import ConditionalIndependence
@@ -12,7 +14,7 @@ from causal_testing.specification.scenario import Scenario
 from causal_testing.specification.variable import Input, Output
 from causal_testing.specification.causal_dag import CausalDAG
 
-pd.set_option('display.max_columns', 500)
+#pd.set_option('display.max_columns', 500)
 
 
 def get_dir_path() -> argparse.Namespace:
@@ -24,8 +26,12 @@ def get_dir_path() -> argparse.Namespace:
                         help="Path to seed directory containing DAG.dot and program.py",
                         required=True,
                         )
-    args = parser.parse_args()
-    return args.path
+    parser.add_argument('-t',
+                        help="Flag that if set, the script will run pytest tests",
+                        action='store_true',
+                        )
+
+    return parser.parse_args()
 
 
 def count(lst):
@@ -36,18 +42,21 @@ def count(lst):
         counts[item] += 1
     return counts
 
+
 def independence_metamorphic_tests(
-    independence: ConditionalIndependence, scenario: Scenario, sample_size: int = 1, seed=0
+        independence: ConditionalIndependence, scenario: Scenario, sample_size: int = 1, seed=0
 ):
     print(independence)
     X = independence.X
     X_prime = scenario.treatment_variables[X].name.replace("'", "_prime")
-    inputs = list(set([v.name for v in scenario.variables.values() if isinstance(v, Input) and v.name not in (list(independence.Z) + [X])] + [X]))
+    inputs = list(set([v.name for v in scenario.variables.values() if
+                       isinstance(v, Input) and v.name not in (list(independence.Z) + [X])] + [X]))
     inputs_prime = [scenario.treatment_variables[x].name.replace("'", "_prime") for x in inputs]
     columns = inputs + [x for x in independence.Z if x != X] + inputs_prime
     assert len(set(inputs).intersection(inputs_prime)) == 0, f"{set(inputs).intersection(inputs_prime)} should be empty"
     assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
-    assert len(inputs_prime) == len(set(inputs_prime)), f"Input prime names not unique {inputs_prime} {count(inputs_prime)}"
+    assert len(inputs_prime) == len(
+        set(inputs_prime)), f"Input prime names not unique {inputs_prime} {count(inputs_prime)}"
     assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
     samples = pd.DataFrame(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
@@ -64,13 +73,15 @@ def independence_metamorphic_tests(
     Z_values = samples[independence.Z]
     print(samples)
     print("x_values", X_values.to_dict(orient="records"))
-    print("x_prime_values", [{k.replace("_prime", ""): v for k, v in values.items()} for values in X_prime_values.to_dict(orient="records")],)
+    print("x_prime_values", [{k.replace("_prime", ""): v for k, v in values.items()} for values in
+                             X_prime_values.to_dict(orient="records")], )
     # assert False
     # assert len(x_values) == len(x_prime_values) == len(Z_values)
     return list(
         zip(
             X_values.to_dict(orient="records"),
-            [{k.replace("_prime", ""): v for k, v in values.items()} for values in X_prime_values.to_dict(orient="records")],
+            [{k.replace("_prime", ""): v for k, v in values.items()} for values in
+             X_prime_values.to_dict(orient="records")],
             Z_values.to_dict(orient="records"),
             [independence.Y] * len(X_values),
             [independence] * len(X_values)
@@ -86,14 +97,15 @@ def construct_independence_test_suite(independences: List[ConditionalIndependenc
 
 
 def dependence_metamorphic_tests(
-    edge: Tuple[str, str], scenario: Scenario, dag: CausalDAG, sample_size: int = 1, seed=0
+        edge: Tuple[str, str], scenario: Scenario, dag: CausalDAG, sample_size: int = 1, seed=0
 ):
     X = edge[0]
     X_prime = scenario.treatment_variables[X].name.replace("'", "_prime")
 
     adjustment_set = min([x for x in dag.direct_effect_adjustment_sets([edge[0]], [edge[1]]) if edge[1] not in x])
 
-    inputs = list(set([v.name for v in scenario.variables.values() if isinstance(v, Input) and v.name != X] + list(adjustment_set)))
+    inputs = list(set([v.name for v in scenario.variables.values() if isinstance(v, Input) and v.name != X] + list(
+        adjustment_set)))
     assert X not in inputs, f"{X} should NOT be in {inputs}"
     columns = inputs + [X] + [X_prime]
     assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
@@ -112,7 +124,8 @@ def dependence_metamorphic_tests(
     return list(
         zip(
             X_values.to_dict(orient="records"),
-            [{k.replace("_prime", ""): v for k, v in values.items()} for values in X_prime_values.to_dict(orient="records")],
+            [{k.replace("_prime", ""): v for k, v in values.items()} for values in
+             X_prime_values.to_dict(orient="records")],
             other_inputs.to_dict(orient="records"),
             [edge[1]] * len(X_values),
             [edge] * len(X_values),
@@ -128,23 +141,38 @@ def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scen
         test = dependence_metamorphic_tests(edge, scenario, dag)
         print(edge, test)
         test_suite += test
-    assert len(test_suite) == len(edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
+    assert len(test_suite) == len(
+        edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
     return test_suite
 
 
-dir_path = get_dir_path()
-dir_module_path = dir_path + ".program"
-program = import_module(dir_module_path)
-dag = CausalDAG(Path(dir_path) / "DAG.dot")
+if __name__ == "__main__":
 
-variables = [Input(x, float, uniform(0, 10)) for x in dag.graph.nodes if x.startswith("X")]
-variables += [Output(y, float, uniform(0, 10)) for y in dag.graph.nodes if y.startswith("Y")]
+    args = get_dir_path()
+    dir_path = args.path
+    dir_module_path = dir_path + ".program"
+    dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
+    print(dir_module_path)
 
-independences = dag.list_conditional_independence_relationships(search_heuristic="min_direct")
-independences = [i for i in independences if not i.Y.startswith("X")]
+    program = import_module(dir_module_path)
+    dag = CausalDAG(Path(dir_path) / "DAG.dot")
 
-scenario = Scenario(set(variables))
-scenario.setup_treatment_variables()
+    variables = [Input(x, float, uniform(0, 10)) for x in dag.graph.nodes if x.startswith("X")]
+    variables += [Output(y, float, uniform(0, 10)) for y in dag.graph.nodes if y.startswith("Y")]
+
+    independences = dag.list_conditional_independence_relationships(search_heuristic="min_direct")
+    independences = [i for i in independences if not i.Y.startswith("X")]
+
+    scenario = Scenario(set(variables))
+    scenario.setup_treatment_variables()
+
+    if args.t:
+        retcode = pytest.main(["test_program"])
+    else:
+        print(f"{len(independences)} independences", independences)
+        print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
+
+
 
 @pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
 def test_dependence(run):
@@ -155,13 +183,10 @@ def test_dependence(run):
     treatment = program(**(other_inputs | x_prime_value))[y]
     assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment}"
 
+
 @pytest.mark.parametrize("run", construct_independence_test_suite(independences, scenario))
 def test_independence(run):
     x_value, x_prime_value, z_values, y, independence = run
     control = program(**(x_value | z_values))[y]
     treatment = program(**(x_prime_value | z_values))[y]
     assert control == treatment, f"Expected control {control} to equal treatment {treatment}"
-
-if __name__ == "__main__":
-    print(f"{len(independences)} independences", independences)
-    print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
