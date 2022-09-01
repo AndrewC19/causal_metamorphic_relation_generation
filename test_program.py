@@ -167,7 +167,7 @@ if __name__ == "__main__":
     scenario.setup_treatment_variables()
 
     if args.t:
-        retcode = pytest.main(["test_program"])
+        retcode = pytest.main()
     else:
         print(f"{len(independences)} independences", independences)
         print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
