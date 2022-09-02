@@ -14,7 +14,8 @@ from causal_testing.specification.scenario import Scenario
 from causal_testing.specification.variable import Input, Output
 from causal_testing.specification.causal_dag import CausalDAG
 
-#pd.set_option('display.max_columns', 500)
+
+# pd.set_option('display.max_columns', 500)
 
 
 def get_dir_path() -> argparse.Namespace:
@@ -46,7 +47,6 @@ def count(lst):
 def independence_metamorphic_tests(
         independence: ConditionalIndependence, scenario: Scenario, sample_size: int = 1, seed=0
 ):
-    print(independence)
     X = independence.X
     X_prime = scenario.treatment_variables[X].name.replace("'", "_prime")
     inputs = list(set([v.name for v in scenario.variables.values() if
@@ -62,19 +62,13 @@ def independence_metamorphic_tests(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
         columns=columns,
     )
-    print(samples)
     for col in columns[:-len(inputs_prime)]:
-        print(col)
         samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
     for x, x_prime in zip(inputs, inputs_prime):
         samples[x_prime] = lhsmdu.inverseTransformSample(scenario.treatment_variables[x].distribution, samples[x_prime])
     X_values = samples[inputs]
     X_prime_values = samples[inputs_prime]
     Z_values = samples[independence.Z]
-    print(samples)
-    print("x_values", X_values.to_dict(orient="records"))
-    print("x_prime_values", [{k.replace("_prime", ""): v for k, v in values.items()} for values in
-                             X_prime_values.to_dict(orient="records")], )
     # assert False
     # assert len(x_values) == len(x_prime_values) == len(Z_values)
     return list(
@@ -114,7 +108,6 @@ def dependence_metamorphic_tests(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
         columns=columns,
     )
-    print(samples)
     for col in columns[:-1]:
         samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
     samples[X_prime] = lhsmdu.inverseTransformSample(scenario.treatment_variables[X].distribution, samples[X_prime])
@@ -135,43 +128,39 @@ def dependence_metamorphic_tests(
 
 
 def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scenario):
-    print("=== construct_dependence_test_suite ===")
     test_suite = []
     for edge in edges:
         test = dependence_metamorphic_tests(edge, scenario, dag)
-        print(edge, test)
         test_suite += test
     assert len(test_suite) == len(
         edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
     return test_suite
 
 
+args = get_dir_path()
+dir_path = args.path
+dir_module_path = dir_path + ".program"
+dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
+
+program = import_module(dir_module_path).program  # Import program function from program module
+dag = CausalDAG(str(Path(dir_path) / "DAG.dot"))
+
+variables = [Input(x, float, uniform(0, 10)) for x in dag.graph.nodes if x.startswith("X")]
+variables += [Output(y, float, uniform(0, 10)) for y in dag.graph.nodes if y.startswith("Y")]
+
+independences = dag.list_conditional_independence_relationships(search_heuristic="min_direct")
+independences = [i for i in independences if not i.Y.startswith("X")]
+
+scenario = Scenario(set(variables))
+scenario.setup_treatment_variables()
+
+retcode = pytest.main()
+print(retcode)
+
 if __name__ == "__main__":
-
-    args = get_dir_path()
-    dir_path = args.path
-    dir_module_path = dir_path + ".program"
-    dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
-    print(dir_module_path)
-
-    program = import_module(dir_module_path)
-    dag = CausalDAG(Path(dir_path) / "DAG.dot")
-
-    variables = [Input(x, float, uniform(0, 10)) for x in dag.graph.nodes if x.startswith("X")]
-    variables += [Output(y, float, uniform(0, 10)) for y in dag.graph.nodes if y.startswith("Y")]
-
-    independences = dag.list_conditional_independence_relationships(search_heuristic="min_direct")
-    independences = [i for i in independences if not i.Y.startswith("X")]
-
-    scenario = Scenario(set(variables))
-    scenario.setup_treatment_variables()
-
-    if args.t:
-        retcode = pytest.main()
-    else:
-        print(f"{len(independences)} independences", independences)
-        print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
-
+    pass
+    # print(f"{len(independences)} independences", independences)
+    # print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
 
 
 @pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
