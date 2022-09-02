@@ -15,25 +15,7 @@ from causal_testing.specification.variable import Input, Output
 from causal_testing.specification.causal_dag import CausalDAG
 
 
-# pd.set_option('display.max_columns', 500)
-
-
-def get_dir_path() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Parses args"
-    )
-    parser.add_argument('-p',
-                        '--path',
-                        help="Path to seed directory containing DAG.dot and program.py",
-                        required=True,
-                        )
-    parser.add_argument('-t',
-                        help="Flag that if set, the script will run pytest tests",
-                        action='store_true',
-                        )
-
-    return parser.parse_args()
-
+pd.set_option('display.max_columns', 500)
 
 def count(lst):
     counts = {}
@@ -137,8 +119,7 @@ def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scen
     return test_suite
 
 
-args = get_dir_path()
-dir_path = args.path
+dir_path = "seed_14834"
 dir_module_path = dir_path + ".program"
 dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
 
@@ -154,13 +135,10 @@ independences = [i for i in independences if not i.Y.startswith("X")]
 scenario = Scenario(set(variables))
 scenario.setup_treatment_variables()
 
-retcode = pytest.main()
-print(retcode)
-
 if __name__ == "__main__":
-    pass
-    # print(f"{len(independences)} independences", independences)
-    # print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
+
+    print(f"{len(independences)} independences", independences)
+    print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
 
 
 @pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
