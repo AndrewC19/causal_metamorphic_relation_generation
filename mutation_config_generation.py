@@ -1,11 +1,9 @@
 """A script for generating TOML mutation configuration files for the cosmic-ray python mutation testing library."""
 import networkx as nx
 import tomlkit
-
-from dag_generation import generate_dag, get_non_causal_node_pairs
-from helpers import safe_open_w
 from tomlkit import aot, inline_table, nl, table, document, array
-
+from helpers import safe_open_w
+from dag_utils import get_non_causal_node_pairs
 
 def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str):
     """Generate a TOML configuration file listing causal mutations for the specified causal DAG.
@@ -73,9 +71,3 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
 
     with safe_open_w(target_directory_path) as toml_file:
         tomlkit.dump(toml_document, toml_file)
-
-
-if __name__ == "__main__":
-    dag = generate_dag(10, 0.2)
-    dag_edges = get_non_causal_node_pairs(dag)
-    dag.add_edges_from(dag_edges)
