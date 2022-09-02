@@ -38,7 +38,7 @@ def program(
     ('Y9', 'Y10')
     """
     if Y1 is None:
-        Y1 = X2 - X2
+        Y1 = X2 - 2
     if Y2 is None:
         Y2 = X4 * X4
     if Y3 is None:
