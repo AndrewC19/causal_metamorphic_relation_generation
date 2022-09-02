@@ -17,6 +17,8 @@ from causal_testing.specification.causal_dag import CausalDAG
 
 pd.set_option('display.max_columns', 500)
 
+dir_path = "seed_14834"
+
 def count(lst):
     counts = {}
     for item in lst:
@@ -118,8 +120,6 @@ def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scen
         edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
     return test_suite
 
-
-dir_path = "seed_14834"
 dir_module_path = dir_path + ".program"
 dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
 
