@@ -5,6 +5,7 @@ from tomlkit import aot, inline_table, nl, table, document, array
 from helpers import safe_open_w
 from dag_utils import get_non_causal_node_pairs
 
+
 def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str):
     """Generate a TOML configuration file listing causal mutations for the specified causal DAG.
 

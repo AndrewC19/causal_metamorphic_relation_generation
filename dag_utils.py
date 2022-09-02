@@ -37,7 +37,7 @@ def get_non_causal_node_pairs(dag: nx.DiGraph):
             cause_index = int(cause_node[1:])
             effect_index = int(effect_node[1:])
             if cause_index > effect_index:
-                continue
+                pair = (effect_index, cause_index)
 
         valid_non_causal_node_pairs.append(pair)
 
@@ -53,3 +53,27 @@ def get_exogenous_nodes(graph: nx.DiGraph):
     """
     return [node for node in graph.nodes if not list(graph.predecessors(node))]
 
+
+def structural_hamming_distance(
+        true_graph: nx.DiGraph,
+        other_graph: nx.DiGraph
+):
+    """Compute structural hamming distance between a pair of graphs.
+
+    This implementation follows the definition from the following paper:
+        Structural Intervention Distance (SID) for Evaluating Causal
+        Graphs (Peters and Buhlmann, 2014), page 2.
+
+    Informally, the structural hamming distance is the number of edges that must
+    be changed (by removing, adding, or reversing its direction) to make the
+    two DAGs structurally equivalent.
+
+    :param true_graph: The true causal DAG.
+    :param other_graph: The graph to compare against the true causal DAG.
+    :returns: structural hamming distance.
+    """
+    true_edge_set = set(true_graph.edges)
+    other_edge_set = set(other_graph.edges)
+    exclusive_true_edges = true_edge_set - other_edge_set
+    exclusive_other_edges = other_edge_set - true_edge_set
+    return len(exclusive_true_edges) + len(exclusive_other_edges)
