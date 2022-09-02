@@ -168,9 +168,9 @@ if __name__ == "__main__":
 
     if args.t:
         retcode = pytest.main()
-    # else:
-        #print(f"{len(independences)} independences", independences)
-        #print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
+    else:
+        print(f"{len(independences)} independences", independences)
+        print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
 
 
 
