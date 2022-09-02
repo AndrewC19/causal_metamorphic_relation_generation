@@ -4,9 +4,7 @@ from importlib import import_module
 import argparse
 import lhsmdu
 import re
-import pytest
 import pandas as pd
-from pytest import ExitCode
 
 from scipy.stats import uniform
 
@@ -27,10 +25,6 @@ def get_dir_path() -> argparse.Namespace:
                         '--path',
                         help="Path to seed directory containing DAG.dot and program.py",
                         required=True,
-                        )
-    parser.add_argument('-t',
-                        help="Flag that if set, the script will run pytest tests",
-                        action='store_true',
                         )
 
     return parser.parse_args()
@@ -155,18 +149,7 @@ independences = [i for i in independences if not i.Y.startswith("X")]
 scenario = Scenario(set(variables))
 scenario.setup_treatment_variables()
 
-retcode = pytest.main()
-print("retcode", retcode)
-assert retcode != ExitCode.TESTS_FAILED, f"Bad exit code {retcode}"
-
-if __name__ == "__main__":
-    pass
-    # print(f"{len(independences)} independences", independences)
-    # print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
-
-
-@pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
-def test_dependence(run):
+for run in construct_dependence_test_suite(dag.graph.edges, scenario):
     x_value, x_prime_value, other_inputs, y, independence, adjustment_set = run
     print(other_inputs)
     print(adjustment_set)
@@ -175,9 +158,10 @@ def test_dependence(run):
     assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment}"
 
 
-@pytest.mark.parametrize("run", construct_independence_test_suite(independences, scenario))
-def test_independence(run):
+for run in construct_independence_test_suite(independences, scenario):
     x_value, x_prime_value, z_values, y, independence = run
     control = program(**(x_value | z_values))[y]
     treatment = program(**(x_prime_value | z_values))[y]
     assert control == treatment, f"Expected control {control} to equal treatment {treatment}"
+
+print("FINISHED")
