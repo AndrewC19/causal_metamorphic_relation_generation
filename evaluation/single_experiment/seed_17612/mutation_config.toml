@@ -2,7 +2,7 @@
 module-path = "program.py"
 timeout = 20.0
 excluded-modules = []
-test-command = "cd ..; python test_program.py -p='seed_17612'"
+test-command = 'cd ../../..; python test_program.py -p="evaluation\single_experiment\seed_17612" -t'
 
 [cosmic-ray.distributor]
 name = "local"

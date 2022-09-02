@@ -46,7 +46,7 @@ def count(lst):
 def independence_metamorphic_tests(
         independence: ConditionalIndependence, scenario: Scenario, sample_size: int = 1, seed=0
 ):
-    print(independence)
+    #print(independence)
     X = independence.X
     X_prime = scenario.treatment_variables[X].name.replace("'", "_prime")
     inputs = list(set([v.name for v in scenario.variables.values() if
@@ -62,19 +62,19 @@ def independence_metamorphic_tests(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
         columns=columns,
     )
-    print(samples)
+    #print(samples)
     for col in columns[:-len(inputs_prime)]:
-        print(col)
+        #print(col)
         samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
     for x, x_prime in zip(inputs, inputs_prime):
         samples[x_prime] = lhsmdu.inverseTransformSample(scenario.treatment_variables[x].distribution, samples[x_prime])
     X_values = samples[inputs]
     X_prime_values = samples[inputs_prime]
     Z_values = samples[independence.Z]
-    print(samples)
-    print("x_values", X_values.to_dict(orient="records"))
-    print("x_prime_values", [{k.replace("_prime", ""): v for k, v in values.items()} for values in
-                             X_prime_values.to_dict(orient="records")], )
+    #print(samples)
+    #print("x_values", X_values.to_dict(orient="records"))
+    #print("x_prime_values", [{k.replace("_prime", ""): v for k, v in values.items()} for values in
+                             # X_prime_values.to_dict(orient="records")], )
     # assert False
     # assert len(x_values) == len(x_prime_values) == len(Z_values)
     return list(
@@ -114,7 +114,7 @@ def dependence_metamorphic_tests(
         lhsmdu.sample(len(columns), sample_size, randomSeed=seed).T,
         columns=columns,
     )
-    print(samples)
+    #print(samples)
     for col in columns[:-1]:
         samples[col] = lhsmdu.inverseTransformSample(scenario.variables[col].distribution, samples[col])
     samples[X_prime] = lhsmdu.inverseTransformSample(scenario.treatment_variables[X].distribution, samples[X_prime])
@@ -135,11 +135,11 @@ def dependence_metamorphic_tests(
 
 
 def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scenario):
-    print("=== construct_dependence_test_suite ===")
+    #print("=== construct_dependence_test_suite ===")
     test_suite = []
     for edge in edges:
         test = dependence_metamorphic_tests(edge, scenario, dag)
-        print(edge, test)
+        #print(edge, test)
         test_suite += test
     assert len(test_suite) == len(
         edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
@@ -167,18 +167,18 @@ if __name__ == "__main__":
     scenario.setup_treatment_variables()
 
     if args.t:
-        retcode = pytest.main(["test_program"])
-    else:
-        print(f"{len(independences)} independences", independences)
-        print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
+        retcode = pytest.main()
+    # else:
+        #print(f"{len(independences)} independences", independences)
+        #print(f"{len(dag.graph.edges)} edges", dag.graph.edges)
 
 
 
 @pytest.mark.parametrize("run", construct_dependence_test_suite(dag.graph.edges, scenario))
 def test_dependence(run):
     x_value, x_prime_value, other_inputs, y, independence, adjustment_set = run
-    print(other_inputs)
-    print(adjustment_set)
+    #print(other_inputs)
+    #print(adjustment_set)
     control = program(**(other_inputs | x_value))[y]
     treatment = program(**(other_inputs | x_prime_value))[y]
     assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment}"
