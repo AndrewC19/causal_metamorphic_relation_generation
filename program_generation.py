@@ -12,17 +12,86 @@ from deap.gp import (
     cxOnePoint,
     mutUniform,
 )
-from deap import creator, base, tools, algorithms
+from deap import creator, base, tools, algorithms, gp
 from dag_generation import generate_dag
 from typing import List, Iterable
 from math import ceil
 from helpers import safe_open_w
+import sys
+
+def choose_terminal(pset, type_, prob=0.7):
+    variables = [t for t in pset.terminals[type_] if str(t.name).startswith("ARG")]
+    constants = [t for t in pset.terminals[type_] if t not in variables]
+    if random.random() < prob and variables != []:
+        return random.choice(variables)
+    else:
+        return random.choice(constants)
+
+
+def gen_terminal(expr, pset, type_):
+    try:
+        term = choose_terminal(pset, type_)
+    except IndexError:
+        _, _, traceback = sys.exc_info()
+        raise IndexError(
+            "The gp.generate function tried to add "
+            "a terminal of type '%s', but there is "
+            "none available." % (type_,)
+        ).with_traceback(traceback)
+    if gp.isclass(term):
+        term = term()
+    expr.append(term)
+
+
+def gen_primitive(expr, pset, type_, stack, depth):
+    try:
+        prim = random.choice(pset.primitives[type_])
+        expr.append(prim)
+        for arg in reversed(prim.args):
+            stack.append((depth + 1, arg))
+    except IndexError:
+        gen_terminal(expr, pset, type_)
+
+
+def is_subset(set1, set2):
+    return all([x in set2 for x in set1])
+
+
+def all_variables_in(expr, pset, type_):
+    var_terms = [v for v in pset.terminals[type_] if isinstance(v, gp.Terminal)]
+    expr_terms = [v for v in expr if v in var_terms]
+    return is_subset(var_terms, expr_terms)
+
+def generate(pset, type_=None):
+    """Generate a Tree as a list of list. The tree is build
+    from the root to the leaves, and it stop growing when the
+    condition is fulfilled.
+
+    :param pset: Primitive set from which primitives are selected.
+    :param min_: Minimum height of the produced trees.
+    :param max_: Maximum Height of the produced trees.
+    :param condition: The condition is a function that takes two arguments,
+                      the height of the tree to build and the current
+                      depth in the tree.
+    :param type_: The type that should return the tree when called, when
+                  :obj:`None` (default) the type of :pset: (pset.ret)
+                  is assumed.
+    :returns: A grown tree with leaves at possibly different depths
+              depending on the condition function.
+    """
+    if type_ is None:
+        type_ = pset.ret
+    individual = gp.PrimitiveTree(gp.genFull(pset, 1, 1))
+    while not all_variables_in(individual, pset, type_):
+        individual = gp.mutInsert(individual, pset)[0]
+    return individual
 
 
 def generate_program(
     causal_dag: nx.DiGraph,
     target_directory_path: str = "./synthetic_programs",
     program_name: str = "synthetic_program",
+    seed=0
 ):
     """Generate an arithmetic python program with the same causal structure as the provided causal DAG.
 
@@ -31,6 +100,7 @@ def generate_program(
     :param target_directory_path: The path of the directory to which the program will be saved.
     :param program_name: The name the program will be saved as (excluding the .py extension).
     """
+    random.seed(0)
     input_nodes = [node for node in causal_dag.nodes if "X" in node]
     output_nodes = [node for node in causal_dag.nodes if "Y" in node]
 
@@ -65,6 +135,32 @@ def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
     """
     nodes.sort(key=lambda node: int(node[1:]), reverse=reverse)
     return nodes
+
+
+def setup_pset(causes, constants_ratio, output_node):
+    # Construct a syntax tree representing the program
+    pset = PrimitiveSet("dag_implementation", len(causes))
+
+    # Add primitives of choice
+    pset.addPrimitive(operator.add, 2)
+    pset.addPrimitive(operator.mul, 2)
+    pset.addPrimitive(operator.sub, 2)
+
+    # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
+    for x in range(ceil(constants_ratio * len(causes))):
+        pset.addEphemeralConstant(
+            f"negative_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
+            lambda: random.randint(-50, -1),
+        )
+        pset.addEphemeralConstant(
+            f"positive_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
+            lambda: random.randint(1, 50),
+        )
+
+    # Convert variable names to those in DAG
+    cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
+    pset.renameArguments(**cause_map)
+    return pset
 
 
 def construct_statement_stack_from_outputs_and_dag(
@@ -108,30 +204,10 @@ def construct_statement_stack_from_outputs_and_dag(
     statement_stack = []
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
     for output_node in nodes_ordered_for_traversal:
+        print("DOING OUTPUT NODE", output_node)
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
 
-        # Construct a syntax tree representing the program
-        pset = PrimitiveSet("dag_implementation", len(causes))
-
-        # Add primitives of choice
-        pset.addPrimitive(operator.add, 2)
-        pset.addPrimitive(operator.mul, 2)
-        pset.addPrimitive(operator.sub, 2)
-
-        # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
-        for x in range(ceil(constants_ratio * len(causes))):
-            pset.addEphemeralConstant(
-                f"negative_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-                lambda: random.randint(-50, -1),
-            )
-            pset.addEphemeralConstant(
-                f"positive_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-                lambda: random.randint(1, 50),
-            )
-
-        # Convert variable names to those in DAG
-        cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
-        pset.renameArguments(**cause_map)
+        pset = setup_pset(causes, constants_ratio, output_node)
 
         # Create the individual comprising the allowed set of primitives (+, *, -, **)
         creator.create(
@@ -144,10 +220,8 @@ def construct_statement_stack_from_outputs_and_dag(
         toolbox = base.Toolbox()
         toolbox.register(
             "expr",
-            genFull,
+            generate,
             pset=pset,
-            min_=int(len(causes) / 2) + 1,
-            max_=int(len(causes)),
         )
 
         # Register parameters for evolution: individual, population, selection, mate, mutations
@@ -164,12 +238,12 @@ def construct_statement_stack_from_outputs_and_dag(
         toolbox.register("mutate", mutUniform, expr=toolbox.expr_mut, pset=pset)
 
         # Create the population and hall of fame to store the best solution
-        pop = toolbox.population(n=1000)
+        pop = toolbox.population(n=1)
         hof = tools.HallOfFame(1)
 
         # Run the evolutionary algorithm and select the best solution
-        _, _ = algorithms.eaSimple(
-            pop, toolbox, 0.5, 0.1, 40, halloffame=hof, verbose=False
+        _, _ = algorithms.eaMuPlusLambda(
+            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=100, halloffame=hof, verbose=False
         )
         statement_stack.append((output_node, PrimitiveTree(hof[0])))
     return statement_stack
@@ -331,5 +405,11 @@ def does_not_contain_list(x):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(15, 0.2)
+    dag = generate_dag(10, 0.5)
+    output_node = "Y2"
+    causes = [cause for (cause, effect) in dag.in_edges(output_node)]
+    constants_ratio = 0.5
+    pset = setup_pset(causes, constants_ratio, output_node)
+    individual = generate(pset)
     generate_program(dag, target_directory_path="./evaluation/", program_name="program")
+
