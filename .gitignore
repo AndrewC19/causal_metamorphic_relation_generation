@@ -130,3 +130,7 @@ dmypy.json
 
 # .idea/
 .idea/
+
+# Mutation databases and reports
+*.sqlite
+*.html
