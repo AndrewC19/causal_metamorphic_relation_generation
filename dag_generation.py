@@ -1,7 +1,13 @@
 import networkx as nx
 import random
-from networkx.drawing.nx_pydot import to_pydot, write_dot
+from networkx.drawing.nx_pydot import to_pydot
+from networkx.exception import NetworkXError
 from helpers import safe_open_w
+from dag_utils import (
+    get_non_causal_node_pairs,
+    get_exogenous_nodes,
+    structural_hamming_distance,
+)
 
 
 def generate_dag(
@@ -71,14 +77,34 @@ def generate_dag(
     return input_output_causal_dag
 
 
-def get_exogenous_nodes(graph: nx.DiGraph):
-    """List exogenous nodes in a given directed graph.
+def mutate_dag(causal_dag: nx.DiGraph, p_invert_edge: float):
+    """Invert potential edges in the causal DAG with a specified probability.
 
-    :param graph: A networkx directed graph (nx.DiGraph)
-    :return: A list of exogenous nodes (nodes without parents) in the directed graph.
+    An edge (or absence thereof) can only be inverted if the resulting causal
+    DAG remains acyclic.
+
+    :param causal_dag: A networkx directed graph representing the causal DAG.
+    :param p_invert_edge: Probability that an arbitrary edge (or lack thereof)
+    is inverted.
     """
-    return [node for node in graph.nodes if not list(graph.predecessors(node))]
+    dag_to_mutate = dag.copy()
+    non_causal_node_pairs = get_non_causal_node_pairs(dag_to_mutate)
+    invertible_node_pairs = list(dag_to_mutate.edges) + non_causal_node_pairs
+
+    for node_pair in invertible_node_pairs:
+        if random.random() < p_invert_edge:
+            try:
+                dag_to_mutate.remove_edge(*node_pair)
+            except NetworkXError:
+                dag_to_mutate.add_edge(*node_pair)
+
+    assert nx.is_directed_acyclic_graph(dag_to_mutate)
+    return dag_to_mutate
 
 
 if __name__ == "__main__":
-    dag = generate_dag(20, 0.5)
+    dag = generate_dag(10, 0.5)
+    mutated_dag = mutate_dag(dag, 0.5)
+    shd = structural_hamming_distance(dag, mutated_dag)
+    zero_shd = structural_hamming_distance(mutated_dag, mutated_dag)
+

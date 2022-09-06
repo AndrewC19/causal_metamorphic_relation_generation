@@ -1,13 +1,9 @@
 """A script for generating TOML mutation configuration files for the cosmic-ray python mutation testing library."""
-import toml
 import networkx as nx
 import tomlkit
-
-from dag_generation import generate_dag
-from itertools import combinations
-from helpers import safe_open_w
-from pprint import pprint
 from tomlkit import aot, inline_table, nl, table, document, array
+from helpers import safe_open_w
+from dag_utils import get_non_causal_node_pairs
 
 
 def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str):
@@ -23,7 +19,7 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
                                         'effect_variable': effect_variable})
 
     edge_addition_mutations = []
-    non_causal_node_pairs = _get_non_causal_node_pairs(dag)
+    non_causal_node_pairs = get_non_causal_node_pairs(dag)
     for non_causal_node_pair in non_causal_node_pairs:
         cause_variable, effect_variable = non_causal_node_pair
         edge_addition_mutations.append({'cause_variable': cause_variable,
@@ -76,48 +72,3 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
 
     with safe_open_w(target_directory_path) as toml_file:
         tomlkit.dump(toml_document, toml_file)
-
-
-def _get_non_causal_node_pairs(dag: nx.DiGraph):
-    """Get all pairs of nodes that do not share a directed edge in a causal DAG.
-
-    This function iterates over all pairs of nodes in the graph between which there is
-    no directed edge. It returns all pairs that, if an edge were added, would form a
-    valid causal DAG (i.e. no cycle).
-
-    :param dag: A networkx directed graph representing a causal DAG.
-    :return: A list of pairs of nodes that do not share a causal edge.
-    """
-    edges = dag.edges
-    node_pairs = list(combinations(dag.nodes, 2))
-
-    # Remove existing causal edges
-    non_causal_node_pairs = [pair for pair in node_pairs if pair not in edges]
-
-    # Remove input to input causation, output to input causation, and cycles
-    valid_non_causal_node_pairs = []
-    for pair in non_causal_node_pairs:
-        cause_node, effect_node = pair
-
-        # Input to input causation
-        if cause_node[0] == "X" and effect_node[0] == "X":
-            continue
-
-        # Output to input causation
-        if cause_node[0] == "Y" and effect_node[0] == "X":
-            continue
-
-        # Cyclic causation
-        if cause_node[0] == "Y" and effect_node[0] == "Y" and (cause_node[1] > effect_node[1]):
-            continue
-
-        valid_non_causal_node_pairs.append(pair)
-
-    return valid_non_causal_node_pairs
-
-
-if __name__ == "__main__":
-    dag = generate_dag(10, 0.2)
-    dag_edges = _get_non_causal_node_pairs(dag)
-    dag.add_edges_from(dag_edges)
-    print(nx.is_directed_acyclic_graph(dag))
