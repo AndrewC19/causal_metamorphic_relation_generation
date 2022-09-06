@@ -19,39 +19,6 @@ from math import ceil
 from helpers import safe_open_w
 import sys
 
-def choose_terminal(pset, type_, prob=0.7):
-    variables = [t for t in pset.terminals[type_] if str(t.name).startswith("ARG")]
-    constants = [t for t in pset.terminals[type_] if t not in variables]
-    if random.random() < prob and variables != []:
-        return random.choice(variables)
-    else:
-        return random.choice(constants)
-
-
-def gen_terminal(expr, pset, type_):
-    try:
-        term = choose_terminal(pset, type_)
-    except IndexError:
-        _, _, traceback = sys.exc_info()
-        raise IndexError(
-            "The gp.generate function tried to add "
-            "a terminal of type '%s', but there is "
-            "none available." % (type_,)
-        ).with_traceback(traceback)
-    if gp.isclass(term):
-        term = term()
-    expr.append(term)
-
-
-def gen_primitive(expr, pset, type_, stack, depth):
-    try:
-        prim = random.choice(pset.primitives[type_])
-        expr.append(prim)
-        for arg in reversed(prim.args):
-            stack.append((depth + 1, arg))
-    except IndexError:
-        gen_terminal(expr, pset, type_)
-
 
 def is_subset(set1, set2):
     return all([x in set2 for x in set1])
@@ -412,4 +379,3 @@ if __name__ == "__main__":
     pset = setup_pset(causes, constants_ratio, output_node)
     individual = generate(pset)
     generate_program(dag, target_directory_path="./evaluation/", program_name="program")
-
