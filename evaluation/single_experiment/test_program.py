@@ -26,7 +26,11 @@ def get_dir_path() -> argparse.Namespace:
                         help="Path to seed directory containing DAG.dot and program.py",
                         required=True,
                         )
-
+    parser.add_argument('-s',
+                        '--seed',
+                        help="A random seed",
+                        required=False,
+                        )
     return parser.parse_args()
 
 
@@ -114,7 +118,7 @@ def dependence_metamorphic_tests(
             X_values.to_dict(orient="records"),
             [{k.replace("_prime", ""): v for k, v in values.items()} for values in
              X_prime_values.to_dict(orient="records")],
-            other_inputs.to_dict(orient="records"),
+            other_inputs.to_dict(orient="records") if not other_inputs.empty else [{}] * len(X_values),
             [edge[1]] * len(X_values),
             [edge] * len(X_values),
             [adjustment_set] * len(X_values)
@@ -126,6 +130,7 @@ def construct_dependence_test_suite(edges: List[Tuple[str, str]], scenario: Scen
     test_suite = []
     for edge in edges:
         test = dependence_metamorphic_tests(edge, scenario, dag)
+        assert len(test) > 0, "Must be at least one test"
         test_suite += test
     assert len(test_suite) == len(
         edges), f"Expected test suite to contain {len(edges)} tests but it actually contained {len(test_suite)}"
@@ -136,6 +141,11 @@ args = get_dir_path()
 dir_path = args.path
 dir_module_path = dir_path + ".program"
 dir_module_path = re.sub(r'[/\\]', '.', dir_module_path)  # replace slashes with . for module import
+
+seed = 0
+if args.seed is not None:
+    seed = int(args.seed)
+lhsmdu.setRandomSeed(seed)
 
 program = import_module(dir_module_path).program  # Import program function from program module
 dag = CausalDAG(str(Path(dir_path) / "DAG.dot"))
@@ -151,11 +161,12 @@ scenario.setup_treatment_variables()
 
 for run in construct_dependence_test_suite(dag.graph.edges, scenario):
     x_value, x_prime_value, other_inputs, y, independence, adjustment_set = run
-    print(other_inputs)
-    print(adjustment_set)
     control = program(**(other_inputs | x_value))[y]
     treatment = program(**(other_inputs | x_prime_value))[y]
-    assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment}"
+    if y == "Y8":
+        print(run)
+        print(control, treatment)
+    assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
 
 
 for run in construct_independence_test_suite(independences, scenario):
@@ -163,5 +174,3 @@ for run in construct_independence_test_suite(independences, scenario):
     control = program(**(x_value | z_values))[y]
     treatment = program(**(x_prime_value | z_values))[y]
     assert control == treatment, f"Expected control {control} to equal treatment {treatment}"
-
-print("FINISHED")
