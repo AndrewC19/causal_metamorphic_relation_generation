@@ -17,6 +17,7 @@ from dag_generation import generate_dag
 from typing import List, Iterable
 from math import ceil
 from helpers import safe_open_w
+from time import time
 import sys
 
 
@@ -76,11 +77,15 @@ def generate_program(
     sorted_output_nodes = sort_causal_dag_nodes(output_nodes, False)
 
     # Use GP to construct a series of statements (program) with the same causal structure as the DAG
+    gp_start_time = time()
     statement_stack = construct_statement_stack_from_outputs_and_dag(
         output_nodes, causal_dag
     )
+    gp_end_time = time()
+    print(f"GP Time: {gp_end_time - gp_start_time}s")
 
     # Write the program
+    format_start_time = time()
     write_statement_stack_to_python_file(
         statement_stack,
         sorted_input_nodes,
@@ -89,6 +94,8 @@ def generate_program(
         target_directory_path,
         program_name,
     )
+    format_end_time = time()
+    print(f"Format time: {format_end_time - format_start_time}s")
 
 
 def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
@@ -112,6 +119,7 @@ def setup_pset(causes, constants_ratio, output_node):
     pset.addPrimitive(operator.add, 2)
     pset.addPrimitive(operator.mul, 2)
     pset.addPrimitive(operator.sub, 2)
+    pset.addPrimitive(operator.truediv, 2)
 
     # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
     for x in range(ceil(constants_ratio * len(causes))):
@@ -258,6 +266,7 @@ def write_statement_stack_to_python_file(
     :param target_directory_path: The directory to which the program will be saved.
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
+    imports_str = "from math import log\n\n\n"
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
     input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
@@ -268,11 +277,11 @@ def write_statement_stack_to_python_file(
         "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
-    # formatted_program_statements = format_program_statements(statement_stack)
-    formatted_program_statements = statement_stack
+    formatted_program_statements = format_program_statements(statement_stack)
     with safe_open_w(
         os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
+        program_file.write(imports_str)
         program_file.write(method_definition_str)
         program_file.write(doc_str)
         program_file.writelines(formatted_program_statements)
@@ -289,18 +298,59 @@ def format_program_statements(program_statements):
     :param program_statements: A list of strings representing arithmetic statements in prefix form.
     :return: A list of strings representing equivalent arithmetic statements in infix form.
     """
-    content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
-    identifier = pp.Word("_" + pp.alphas, "_" + pp.alphanums)
-    parens = identifier("name") + pp.nestedExpr("(", ")", content=content)
     formatted_program_statements = []
     for output, program_statement in program_statements:
-        program_statement = parens.parseString(str(program_statement)).asList()
-        formatted_program_statement = prefix_statement_list_to_infix(program_statement)
+
+        # Convert AST to a networkx graph
+        nodes, edges, labels = gp.graph(program_statement)
+        ast_graph = nx.Graph()
+        ast_graph.add_nodes_from(nodes)
+        ast_graph.add_edges_from(edges)
+
+        def prefix_tree_to_infix_str(tree, root, parent = None):
+            """Convert a prefix abstract syntax tree to an infix string.
+
+            This also converts named operators to conventional symbols e.g. mul
+            to *.
+
+            Example: X <-- + --> Y to X + Y
+
+            :params tree: Abstract syntax tree to be converted into infix form.
+            :params root: Root of the abstract syntax tree.
+            :params parent: Parent of the syntax tree.
+            """
+
+            children = set(tree[root]) - {parent}
+            if len(children) == 0:
+                return labels[root]
+
+            nested = tuple(prefix_tree_to_infix_str(tree, v, root)
+                           for v in children)
+            if labels[root] == "add":
+                c1, c2 = nested
+                return f"({c1} + {c2})"
+            elif labels[root] == "sub":
+                c1, c2 = nested
+                return f"({c1} - {c2})"
+            elif labels[root] == "mul":
+                c1, c2 = nested
+                return f"({c1} * {c2})"
+            elif labels[root] == "truediv":
+                c1, c2 = nested
+                return f"({c1} / ({c2} + 0.00001))"
+            else:
+                raise ValueError(f"Invalid operator {root}")
+
+        # Starting from the AST root, recursively expand the tree into infix
+        # form and return as a string
+        ast_graph_root = 0  # DEAP starts with a root of 0
+        infix_str = prefix_tree_to_infix_str(ast_graph, ast_graph_root)
+
+        # Format line and add to formatted statements for conversion to source
         formatted_program_statements.append(
-            f"\tif {output} is None:\n\t\t{output} = {formatted_program_statement}\n"
+            f"\tif {output} is None:\n\t\t{output} = log(abs({infix_str}))\n"
         )
     return formatted_program_statements
-
 
 def prefix_statement_list_to_infix(statement_list):
     """Convert an arithmetic program statement (in nested list format) from prefix to infix notation.
@@ -363,10 +413,5 @@ def does_not_contain_list(x):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(10, 0.5)
-    output_node = "Y2"
-    causes = [cause for (cause, effect) in dag.in_edges(output_node)]
-    constants_ratio = 0.5
-    pset = setup_pset(causes, constants_ratio, output_node)
-    individual = generate(pset)
-    generate_program(dag, target_directory_path="./evaluation/", program_name="program")
+    dag = generate_dag(100, 1)
+    generate_program(dag, target_directory_path="./evaluation/", program_name="test_program")
