@@ -115,14 +115,8 @@ def setup_pset(causes, constants_ratio, output_node):
 
     # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
     for x in range(ceil(constants_ratio * len(causes))):
-        pset.addEphemeralConstant(
-            f"negative_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-            lambda: random.randint(-50, -1),
-        )
-        pset.addEphemeralConstant(
-            f"positive_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-            lambda: random.randint(1, 50),
-        )
+        pset.addTerminal(random.randint(-50, -1))
+        pset.addTerminal(random.randint(1, 50))
 
     # Convert variable names to those in DAG
     cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
@@ -170,8 +164,8 @@ def construct_statement_stack_from_outputs_and_dag(
     )
     statement_stack = []
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+
     for output_node in nodes_ordered_for_traversal:
-        print("DOING OUTPUT NODE", output_node)
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
 
         pset = setup_pset(causes, constants_ratio, output_node)
@@ -181,9 +175,6 @@ def construct_statement_stack_from_outputs_and_dag(
             "Individual", PrimitiveTree, fitness=creator.FitnessMin, pset=pset
         )
 
-        # Grow trees with a depth bounded by [(#causes/2)+1, #causes] -- this follows from the fact that our primitives
-        # are all binary (take two args). Hence, to ensure all causes are included in the function, the tree must have
-        # at least causes/2 binary primitives, requiring a depth of the same value. # TODO: Check this.
         toolbox = base.Toolbox()
         toolbox.register(
             "expr",
@@ -277,8 +268,8 @@ def write_statement_stack_to_python_file(
         "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
-    formatted_program_statements = format_program_statements(statement_stack)
-
+    # formatted_program_statements = format_program_statements(statement_stack)
+    formatted_program_statements = statement_stack
     with safe_open_w(
         os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:

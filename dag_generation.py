@@ -77,7 +77,11 @@ def generate_dag(
     return input_output_causal_dag
 
 
-def mutate_dag(causal_dag: nx.DiGraph, p_invert_edge: float):
+def mutate_dag(
+        causal_dag: nx.DiGraph,
+        p_invert_edge: float,
+        out_path: str = None
+):
     """Invert potential edges in the causal DAG with a specified probability.
 
     An edge (or absence thereof) can only be inverted if the resulting causal
@@ -85,9 +89,10 @@ def mutate_dag(causal_dag: nx.DiGraph, p_invert_edge: float):
 
     :param causal_dag: A networkx directed graph representing the causal DAG.
     :param p_invert_edge: Probability that an arbitrary edge (or lack thereof)
+    :param out_path: An optional path to save a DOT file.
     is inverted.
     """
-    dag_to_mutate = dag.copy()
+    dag_to_mutate = causal_dag.copy()
     non_causal_node_pairs = get_non_causal_node_pairs(dag_to_mutate)
     invertible_node_pairs = list(dag_to_mutate.edges) + non_causal_node_pairs
 
@@ -99,6 +104,12 @@ def mutate_dag(causal_dag: nx.DiGraph, p_invert_edge: float):
                 dag_to_mutate.add_edge(*node_pair)
 
     assert nx.is_directed_acyclic_graph(dag_to_mutate)
+
+    if out_path:
+        with safe_open_w(out_path) as dag_file:
+            dot_dag = to_pydot(dag_to_mutate).to_string()
+            dag_file.write(dot_dag)
+
     return dag_to_mutate
 
 
