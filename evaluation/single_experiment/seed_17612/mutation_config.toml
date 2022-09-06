@@ -1,0 +1,16 @@
+[cosmic-ray]
+module-path = "program.py"
+timeout = 20.0
+excluded-modules = []
+test-command = 'cd ..; python test_program.py -p "seed_17612"'
+
+[cosmic-ray.distributor]
+name = "local"
+
+[[cosmic-ray.operators]]
+name = "core/VariableReplacer"
+args = [{cause_variable = "X1", effect_variable = "Y1"}, {cause_variable = "X2", effect_variable = "Y2"}, {cause_variable = "X3", effect_variable = "Y3"}, {cause_variable = "X3", effect_variable = "Y4"}, {cause_variable = "Y3", effect_variable = "Y4"}]
+
+[[cosmic-ray.operators]]
+name = "core/VariableInserter"
+args = [{cause_variable = "X1", effect_variable = "Y2"}, {cause_variable = "X1", effect_variable = "Y3"}, {cause_variable = "X1", effect_variable = "Y4"}, {cause_variable = "Y1", effect_variable = "Y2"}, {cause_variable = "Y1", effect_variable = "Y3"}, {cause_variable = "Y1", effect_variable = "Y4"}, {cause_variable = "X2", effect_variable = "Y3"}, {cause_variable = "X2", effect_variable = "Y4"}, {cause_variable = "Y2", effect_variable = "Y3"}, {cause_variable = "Y2", effect_variable = "Y4"}]
