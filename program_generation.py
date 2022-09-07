@@ -19,16 +19,62 @@ from math import ceil
 from helpers import safe_open_w
 from time import time
 import sys
+from inspect import isclass
 
 
 def is_subset(set1, set2):
     return all([x in set2 for x in set1])
 
 
-def all_variables_in(expr, pset, type_):
-    var_terms = [v for v in pset.terminals[type_] if isinstance(v, gp.Terminal)]
+def variable_terms(pset):
+    return [v for v in pset.terminals[pset.ret] if isinstance(v, gp.Terminal)]
+
+
+def all_variables_in(expr, pset):
+    var_terms = variable_terms(pset)
     expr_terms = [v for v in expr if v in var_terms]
     return is_subset(var_terms, expr_terms)
+
+
+def mutInsert(individual, pset, probs):
+    """Inserts a new branch at a random position in *individual*. The subtree
+    at the chosen position is used as child node of the created subtree, in
+    that way, it is really an insertion rather than a replacement. Note that
+    the original subtree will become one of the children of the new primitive
+    inserted, but not perforce the first (its position is randomly selected if
+    the new primitive has more than one child).
+    :param individual: The normal or typed tree to be mutated.
+    :returns: A tuple of one tree.
+    """
+    index = random.randrange(len(individual))
+    node = individual[index]
+    slice_ = individual.searchSubtree(index)
+    choice = random.choice
+
+    # As we want to keep the current node as children of the new one,
+    # it must accept the return value of the current node
+    primitives = [p for p in pset.primitives[node.ret] if node.ret in p.args]
+
+    if len(primitives) == 0:
+        return individual,
+
+    new_node = choice(primitives)
+    new_subtree = [None] * len(new_node.args)
+    position = choice([i for i, a in enumerate(new_node.args) if a == node.ret])
+
+    for i, arg_type in enumerate(new_node.args):
+        if i != position:
+            term = random.choices(pset.terminals[arg_type], weights=[probs[arg_type][str(t)] for t in pset.terminals[arg_type]])[0]
+            probs[arg_type][str(term)] = probs[arg_type][str(term)]/2
+            if isclass(term):
+                term = term()
+            new_subtree[i] = term
+
+    new_subtree[position:position + 1] = individual[slice_]
+    new_subtree.insert(0, new_node)
+    individual[slice_] = new_subtree
+    return individual
+
 
 def generate(pset, type_=None):
     """Generate a Tree as a list of list. The tree is build
@@ -50,8 +96,9 @@ def generate(pset, type_=None):
     if type_ is None:
         type_ = pset.ret
     individual = gp.PrimitiveTree(gp.genFull(pset, 1, 1))
-    while not all_variables_in(individual, pset, type_):
-        individual = gp.mutInsert(individual, pset)[0]
+    probabilities = {typ: {str(term): 1 for term in pset.terminals[typ]} for typ in pset.terminals}
+    while not all_variables_in(individual, pset):
+        individual = mutInsert(individual, pset, probabilities)
     return individual
 
 
@@ -209,9 +256,9 @@ def construct_statement_stack_from_outputs_and_dag(
 
         # Run the evolutionary algorithm and select the best solution
         _, _ = eaMuPlusLambda(
-            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=1000, halloffame=hof, verbose=True
+            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=1000, halloffame=hof, verbose=False
         )
-        assert all_variables_in(hof[0], pset, pset.ret), f"Not all causes in {hof[0]} with fitness {hof[0].fitness.values}"
+        assert all_variables_in(hof[0], pset), f"Not all causes in {hof[0]} with fitness {hof[0].fitness.values}"
         statement_stack.append((output_node, PrimitiveTree(hof[0])))
     return statement_stack
 
@@ -281,7 +328,7 @@ def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen,
         if halloffame[0].fitness.values[0] == 0:
             return population, logbook
         # Vary the population
-        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb)
+        offspring = algorithms.varOr(population, toolbox, lambda_, cxpb, mutpb)
 
         # Evaluate the individuals with an invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
@@ -313,7 +360,6 @@ def synthetic_statement_fitness(individual, causes, pset):
     :param pset: A PrimitiveSet used to generate the individual.
     :return: A float representing the fitness value.
     """
-    print("Evaluating individual")
     causes_in_statement = []
     for node in individual:
         if isinstance(node, Terminal):
@@ -321,7 +367,6 @@ def synthetic_statement_fitness(individual, causes, pset):
 
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
-    print("Evaluated individual")
     return len(missing_causes) + int(contains_self_subtraction(individual)),
 
     # # Remove solutions that do not contain all causes
