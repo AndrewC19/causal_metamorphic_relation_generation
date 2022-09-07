@@ -23,10 +23,12 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
                f"{adjustment_set} does not d-separate {cause} and {effect} "
 
         # Where an edge is present, test for causality, otherwise test for independence
-        if node_pair in dag.edges:
-            metamorphic_relations.append(ShouldCause(cause, effect, list(adjustment_set)))
+        if (cause, effect) in dag.edges:
+            metamorphic_relations.append(ShouldCause(cause, effect, list(adjustment_set), dag))
+        elif (effect, cause) in dag.edges:
+            metamorphic_relations.append(ShouldCause(effect, cause, list(adjustment_set), dag))
         else:
-            metamorphic_relations.append(ShouldNotCause(cause, effect, list(adjustment_set)))
+            metamorphic_relations.append(ShouldNotCause(cause, effect, list(adjustment_set), dag))
 
     # Confirm that a single MR is produced for each unique node pair in the DAG
     assert len(metamorphic_relations) == len(unique_node_pairs), \

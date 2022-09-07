@@ -19,11 +19,11 @@ def count(lst):
 class CausalMetamorphicRelation(ABC):
     """A metamorphic relation base class."""
 
-    def __init__(self, input_var: str, output_var: str, adjustment_list: List[str], dag: str):
+    def __init__(self, input_var: str, output_var: str, adjustment_list: List[str], dag: nx.DiGraph):
         self.input_var = input_var
         self.output_var = output_var
         self.adjustment_list = adjustment_list
-        self.dag = nx.DiGraph(nx.nx_pydot.read_dot(dag))
+        self.dag = dag
 
     def generate_tests(self, sample_size=1):
         ...
@@ -98,7 +98,8 @@ class ShouldNotCause(CausalMetamorphicRelation):
                            len(list(self.dag.predecessors(v))) == 0 and v not in (self.adjustment_list + [X])] + [X]))
         inputs_prime = [f"{x}_prime" for x in inputs]
         columns = inputs + [x for x in self.adjustment_list if x != X] + inputs_prime
-        assert len(set(inputs).intersection(inputs_prime)) == 0, f"{set(inputs).intersection(inputs_prime)} should be empty"
+        assert len(set(inputs).intersection(inputs_prime)) == 0,\
+               f"{set(inputs).intersection(inputs_prime)} should be empty"
         assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
         assert len(inputs_prime) == len(
             set(inputs_prime)), f"Input prime names not unique {inputs_prime} {count(inputs_prime)}"
@@ -144,11 +145,13 @@ class ShouldNotCause(CausalMetamorphicRelation):
 
 if __name__ == "__main__":
     program = import_module("evaluation.single_experiment.seed_17612.program").program
+    dag = nx.DiGraph(nx.nx_pydot.read_dot("evaluation/single_experiment/seed_17612/DAG.dot"))
+    print(dag)
     should_cause = ShouldCause(
         input_var="X1",
         output_var="Y1",
         adjustment_list=[],
-        dag="evaluation/single_experiment/seed_17612/DAG.dot",
+        dag=dag
     )
     should_cause.generate_tests()
     should_cause.execute_tests(program)
@@ -157,7 +160,7 @@ if __name__ == "__main__":
         input_var="X3",
         output_var="Y1",
         adjustment_list=["X1"],
-        dag="evaluation/single_experiment/seed_17612/DAG.dot",
+        dag=dag
     )
     should_not_cause.generate_tests()
     should_not_cause.execute_tests(program)
