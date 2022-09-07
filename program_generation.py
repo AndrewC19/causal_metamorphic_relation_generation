@@ -17,40 +17,8 @@ from dag_generation import generate_dag
 from typing import List, Iterable
 from math import ceil
 from helpers import safe_open_w
+from time import time
 import sys
-
-def choose_terminal(pset, type_, prob=0.7):
-    variables = [t for t in pset.terminals[type_] if str(t.name).startswith("ARG")]
-    constants = [t for t in pset.terminals[type_] if t not in variables]
-    if random.random() < prob and variables != []:
-        return random.choice(variables)
-    else:
-        return random.choice(constants)
-
-
-def gen_terminal(expr, pset, type_):
-    try:
-        term = choose_terminal(pset, type_)
-    except IndexError:
-        _, _, traceback = sys.exc_info()
-        raise IndexError(
-            "The gp.generate function tried to add "
-            "a terminal of type '%s', but there is "
-            "none available." % (type_,)
-        ).with_traceback(traceback)
-    if gp.isclass(term):
-        term = term()
-    expr.append(term)
-
-
-def gen_primitive(expr, pset, type_, stack, depth):
-    try:
-        prim = random.choice(pset.primitives[type_])
-        expr.append(prim)
-        for arg in reversed(prim.args):
-            stack.append((depth + 1, arg))
-    except IndexError:
-        gen_terminal(expr, pset, type_)
 
 
 def is_subset(set1, set2):
@@ -109,11 +77,15 @@ def generate_program(
     sorted_output_nodes = sort_causal_dag_nodes(output_nodes, False)
 
     # Use GP to construct a series of statements (program) with the same causal structure as the DAG
+    gp_start_time = time()
     statement_stack = construct_statement_stack_from_outputs_and_dag(
         output_nodes, causal_dag
     )
+    gp_end_time = time()
+    print(f"GP Time: {gp_end_time - gp_start_time}s")
 
     # Write the program
+    format_start_time = time()
     write_statement_stack_to_python_file(
         statement_stack,
         sorted_input_nodes,
@@ -122,6 +94,8 @@ def generate_program(
         target_directory_path,
         program_name,
     )
+    format_end_time = time()
+    print(f"Format time: {format_end_time - format_start_time}s")
 
 
 def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
@@ -145,17 +119,12 @@ def setup_pset(causes, constants_ratio, output_node):
     pset.addPrimitive(operator.add, 2)
     pset.addPrimitive(operator.mul, 2)
     pset.addPrimitive(operator.sub, 2)
+    pset.addPrimitive(operator.truediv, 2)
 
     # Add random (non-zero) constants (such that there is a ~ 1:5 ratio between constants and variables)
     for x in range(ceil(constants_ratio * len(causes))):
-        pset.addEphemeralConstant(
-            f"negative_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-            lambda: random.randint(-50, -1),
-        )
-        pset.addEphemeralConstant(
-            f"positive_const_{output_node}_{x}_{random.randint(-10000, 10000)}",
-            lambda: random.randint(1, 50),
-        )
+        pset.addTerminal(random.randint(-50, -1))
+        pset.addTerminal(random.randint(1, 50))
 
     # Convert variable names to those in DAG
     cause_map = {f"ARG{i}": c for i, c in enumerate(causes)}
@@ -203,8 +172,8 @@ def construct_statement_stack_from_outputs_and_dag(
     )
     statement_stack = []
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+
     for output_node in nodes_ordered_for_traversal:
-        print("DOING OUTPUT NODE", output_node)
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
 
         pset = setup_pset(causes, constants_ratio, output_node)
@@ -214,9 +183,6 @@ def construct_statement_stack_from_outputs_and_dag(
             "Individual", PrimitiveTree, fitness=creator.FitnessMin, pset=pset
         )
 
-        # Grow trees with a depth bounded by [(#causes/2)+1, #causes] -- this follows from the fact that our primitives
-        # are all binary (take two args). Hence, to ensure all causes are included in the function, the tree must have
-        # at least causes/2 binary primitives, requiring a depth of the same value. # TODO: Check this.
         toolbox = base.Toolbox()
         toolbox.register(
             "expr",
@@ -242,11 +208,101 @@ def construct_statement_stack_from_outputs_and_dag(
         hof = tools.HallOfFame(1)
 
         # Run the evolutionary algorithm and select the best solution
-        _, _ = algorithms.eaMuPlusLambda(
-            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=100, halloffame=hof, verbose=False
+        _, _ = eaMuPlusLambda(
+            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=1000, halloffame=hof, verbose=True
         )
+        assert all_variables_in(hof[0], pset, pset.ret), f"Not all causes in {hof[0]} with fitness {hof[0].fitness.values}"
         statement_stack.append((output_node, PrimitiveTree(hof[0])))
     return statement_stack
+
+
+def eaMuPlusLambda(population, toolbox, mu, lambda_, cxpb, mutpb, ngen,
+                   stats=None, halloffame=None, verbose=__debug__):
+    r"""This is the :math:`(\mu + \lambda)` evolutionary algorithm.
+    :param population: A list of individuals.
+    :param toolbox: A :class:`~deap.base.Toolbox` that contains the evolution
+                    operators.
+    :param mu: The number of individuals to select for the next generation.
+    :param lambda\_: The number of children to produce at each generation.
+    :param cxpb: The probability that an offspring is produced by crossover.
+    :param mutpb: The probability that an offspring is produced by mutation.
+    :param ngen: The number of generation.
+    :param stats: A :class:`~deap.tools.Statistics` object that is updated
+                  inplace, optional.
+    :param halloffame: A :class:`~deap.tools.HallOfFame` object that will
+                       contain the best individuals, optional.
+    :param verbose: Whether or not to log the statistics.
+    :returns: The final population
+    :returns: A class:`~deap.tools.Logbook` with the statistics of the
+              evolution.
+    The algorithm takes in a population and evolves it in place using the
+    :func:`varOr` function. It returns the optimized population and a
+    :class:`~deap.tools.Logbook` with the statistics of the evolution. The
+    logbook will contain the generation number, the number of evaluations for
+    each generation and the statistics if a :class:`~deap.tools.Statistics` is
+    given as argument. The *cxpb* and *mutpb* arguments are passed to the
+    :func:`varOr` function. The pseudocode goes as follow ::
+        evaluate(population)
+        for g in range(ngen):
+            offspring = varOr(population, toolbox, lambda_, cxpb, mutpb)
+            evaluate(offspring)
+            population = select(population + offspring, mu)
+    First, the individuals having an invalid fitness are evaluated. Second,
+    the evolutionary loop begins by producing *lambda_* offspring from the
+    population, the offspring are generated by the :func:`varOr` function. The
+    offspring are then evaluated and the next generation population is
+    selected from both the offspring **and** the population. Finally, when
+    *ngen* generations are done, the algorithm returns a tuple with the final
+    population and a :class:`~deap.tools.Logbook` of the evolution.
+    This function expects :meth:`toolbox.mate`, :meth:`toolbox.mutate`,
+    :meth:`toolbox.select` and :meth:`toolbox.evaluate` aliases to be
+    registered in the toolbox. This algorithm uses the :func:`varOr`
+    variation.
+    """
+    logbook = tools.Logbook()
+    logbook.header = ['gen', 'nevals'] + (stats.fields if stats else [])
+
+    # Evaluate the individuals with an invalid fitness
+    invalid_ind = [ind for ind in population if not ind.fitness.valid]
+    fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+    for ind, fit in zip(invalid_ind, fitnesses):
+        ind.fitness.values = fit
+
+    if halloffame is not None:
+        halloffame.update(population)
+
+    record = stats.compile(population) if stats is not None else {}
+    logbook.record(gen=0, nevals=len(invalid_ind), **record)
+    if verbose:
+        print(logbook.stream)
+
+    # Begin the generational process
+    for gen in range(1, ngen + 1):
+        if halloffame[0].fitness.values[0] == 0:
+            return population, logbook
+        # Vary the population
+        offspring = varOr(population, toolbox, lambda_, cxpb, mutpb)
+
+        # Evaluate the individuals with an invalid fitness
+        invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+        fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
+
+        # Update the hall of fame with the generated individuals
+        if halloffame is not None:
+            halloffame.update(offspring)
+
+        # Select the next generation population
+        population[:] = toolbox.select(population + offspring, mu)
+
+        # Update the statistics with the new population
+        record = stats.compile(population) if stats is not None else {}
+        logbook.record(gen=gen, nevals=len(invalid_ind), **record)
+        if verbose:
+            print(logbook.stream)
+
+    return population, logbook
 
 
 def synthetic_statement_fitness(individual, causes, pset):
@@ -257,6 +313,7 @@ def synthetic_statement_fitness(individual, causes, pset):
     :param pset: A PrimitiveSet used to generate the individual.
     :return: A float representing the fitness value.
     """
+    print("Evaluating individual")
     causes_in_statement = []
     for node in individual:
         if isinstance(node, Terminal):
@@ -264,23 +321,26 @@ def synthetic_statement_fitness(individual, causes, pset):
 
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
+    print("Evaluated individual")
+    return len(missing_causes) + int(contains_self_subtraction(individual)),
 
-    # Remove solutions that do not contain all causes
-    if missing_causes:
-        return (1.0,)
-
-    # Remove solutions that include self subtraction
-    if contains_self_subtraction(individual):
-        return (1.0,)
-
-    # We want the smallest statement that contains all variables
-    return (1.0 - (1.0 / len(causes_in_statement)),)
+    # # Remove solutions that do not contain all causes
+    # if missing_causes:
+    #     return (1.0,)
+    #
+    # # Remove solutions that include self subtraction
+    # if contains_self_subtraction(individual):
+    #     return (1.0,)
+    #
+    # # We want the smallest statement that contains all variables
+    # return (1.0 - (1.0 / len(causes_in_statement)),)
 
 
 def contains_self_subtraction(statement):
     subtract_parameters = re.search(r"sub\((\b\w  +\b),\s(\b\1\b)\)", str(statement))
     if subtract_parameters:
         return True
+    return False
 
 
 def write_statement_stack_to_python_file(
@@ -300,6 +360,7 @@ def write_statement_stack_to_python_file(
     :param target_directory_path: The directory to which the program will be saved.
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
+    imports_str = "from math import log\n\n\n"
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
     input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
@@ -311,10 +372,10 @@ def write_statement_stack_to_python_file(
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
     formatted_program_statements = format_program_statements(statement_stack)
-
     with safe_open_w(
         os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
+        program_file.write(imports_str)
         program_file.write(method_definition_str)
         program_file.write(doc_str)
         program_file.writelines(formatted_program_statements)
@@ -331,18 +392,59 @@ def format_program_statements(program_statements):
     :param program_statements: A list of strings representing arithmetic statements in prefix form.
     :return: A list of strings representing equivalent arithmetic statements in infix form.
     """
-    content = pp.Word(pp.alphanums) | "add" | "mul" | "sub" | "," | "-"
-    identifier = pp.Word("_" + pp.alphas, "_" + pp.alphanums)
-    parens = identifier("name") + pp.nestedExpr("(", ")", content=content)
     formatted_program_statements = []
     for output, program_statement in program_statements:
-        program_statement = parens.parseString(str(program_statement)).asList()
-        formatted_program_statement = prefix_statement_list_to_infix(program_statement)
+
+        # Convert AST to a networkx graph
+        nodes, edges, labels = gp.graph(program_statement)
+        ast_graph = nx.Graph()
+        ast_graph.add_nodes_from(nodes)
+        ast_graph.add_edges_from(edges)
+
+        def prefix_tree_to_infix_str(tree, root, parent = None):
+            """Convert a prefix abstract syntax tree to an infix string.
+
+            This also converts named operators to conventional symbols e.g. mul
+            to *.
+
+            Example: X <-- + --> Y to X + Y
+
+            :params tree: Abstract syntax tree to be converted into infix form.
+            :params root: Root of the abstract syntax tree.
+            :params parent: Parent of the syntax tree.
+            """
+
+            children = set(tree[root]) - {parent}
+            if len(children) == 0:
+                return labels[root]
+
+            nested = tuple(prefix_tree_to_infix_str(tree, v, root)
+                           for v in children)
+            if labels[root] == "add":
+                c1, c2 = nested
+                return f"({c1} + {c2})"
+            elif labels[root] == "sub":
+                c1, c2 = nested
+                return f"({c1} - {c2})"
+            elif labels[root] == "mul":
+                c1, c2 = nested
+                return f"({c1} * {c2})"
+            elif labels[root] == "truediv":
+                c1, c2 = nested
+                return f"({c1} / ({c2} + 0.00001))"
+            else:
+                raise ValueError(f"Invalid operator {root}")
+
+        # Starting from the AST root, recursively expand the tree into infix
+        # form and return as a string
+        ast_graph_root = 0  # DEAP starts with a root of 0
+        infix_str = prefix_tree_to_infix_str(ast_graph, ast_graph_root)
+
+        # Format line and add to formatted statements for conversion to source
         formatted_program_statements.append(
-            f"\tif {output} is None:\n\t\t{output} = {formatted_program_statement}\n"
+            f"\tif {output} is None:\n\t\t{output} = log(abs({infix_str}))\n"
         )
     return formatted_program_statements
-
 
 def prefix_statement_list_to_infix(statement_list):
     """Convert an arithmetic program statement (in nested list format) from prefix to infix notation.
@@ -405,11 +507,5 @@ def does_not_contain_list(x):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(10, 0.5)
-    output_node = "Y2"
-    causes = [cause for (cause, effect) in dag.in_edges(output_node)]
-    constants_ratio = 0.5
-    pset = setup_pset(causes, constants_ratio, output_node)
-    individual = generate(pset)
-    generate_program(dag, target_directory_path="./evaluation/", program_name="program")
-
+    dag = generate_dag(100, 1)
+    generate_program(dag, target_directory_path="./evaluation/", program_name="test_program")
