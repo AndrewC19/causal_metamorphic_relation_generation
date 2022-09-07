@@ -32,7 +32,13 @@ class ShouldCause(CausalMetamorphicRelation):
         ...
 
     def __str__(self):
-        return f"{self.input_var} --> {self.output_var} | {self.adjustment_list}"
+        metamorphic_relation_str = f"{self.input_var} --> {self.output_var}"
+        if self.adjustment_list:
+            metamorphic_relation_str += f" | {self.adjustment_list}"
+        return metamorphic_relation_str
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class ShouldNotCause(CausalMetamorphicRelation):
@@ -47,4 +53,10 @@ class ShouldNotCause(CausalMetamorphicRelation):
         ...
 
     def __str__(self):
-        return f"{self.input_var} ⫫ {self.output_var} | {self.adjustment_list}"
+        metamorphic_relation_string = f"{self.input_var} ⫫ {self.output_var}"
+        if self.adjustment_list:
+            metamorphic_relation_string += f" | {self.adjustment_list}"
+        return metamorphic_relation_string
+
+    def __repr__(self):
+        return self.__str__()
