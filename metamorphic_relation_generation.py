@@ -1,4 +1,4 @@
-"""Methods for generating metamorphic relations from a causal DAG."""
+"""Functions for generating metamorphic relations from a causal DAG."""
 import networkx as nx
 from itertools import combinations
 from metamorphic_relation import ShouldCause, ShouldNotCause
@@ -36,6 +36,6 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
 
 
 if __name__ == "__main__":
-    causal_dag = generate_dag(10, 0.2)
+    causal_dag = generate_dag(20, 1)
     causal_dag_metamorphic_relations = generate_metamorphic_relations(causal_dag)
     print(causal_dag_metamorphic_relations)
