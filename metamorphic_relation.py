@@ -19,18 +19,17 @@ def count(lst):
 class CausalMetamorphicRelation(ABC):
     """A metamorphic relation base class."""
 
-    def __init__(self, input_var: str, output_var: str, adjustment_list: List[str], dir_module_path: str, dag: str):
+    def __init__(self, input_var: str, output_var: str, adjustment_list: List[str], dag: str):
         self.input_var = input_var
         self.output_var = output_var
         self.adjustment_list = adjustment_list
         self.dag = nx.DiGraph(nx.nx_pydot.read_dot(dag))
-        self.program = import_module(dir_module_path).program  # Import program function from program module
 
     def generate_tests(self, sample_size=1):
         ...
 
     @abstractmethod
-    def execute_tests(self):
+    def execute_tests(self, program):
         ...
 
 
@@ -71,11 +70,11 @@ class ShouldCause(CausalMetamorphicRelation):
         )
 
 
-    def execute_tests(self):
+    def execute_tests(self, program):
         for run in self.tests:
             x_value, x_prime_value, other_inputs, y, independence = run
-            control = self.program(**(other_inputs | x_value))[y]
-            treatment = self.program(**(other_inputs | x_prime_value))[y]
+            control = program(**(other_inputs | x_value))[y]
+            treatment = program(**(other_inputs | x_prime_value))[y]
             assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
 
     def __str__(self):
@@ -126,11 +125,11 @@ class ShouldNotCause(CausalMetamorphicRelation):
             )
         )
 
-    def execute_tests(self):
+    def execute_tests(self, program):
         for run in self.tests:
             x_value, x_prime_value, other_inputs, y, independence = run
-            control = self.program(**(other_inputs | x_value))[y]
-            treatment = self.program(**(other_inputs | x_prime_value))[y]
+            control = program(**(other_inputs | x_value))[y]
+            treatment = program(**(other_inputs | x_prime_value))[y]
             assert control == treatment, f"Expected control {control} to equal treatment {treatment} for\n{run}"
 
     def __str__(self):
@@ -144,22 +143,21 @@ class ShouldNotCause(CausalMetamorphicRelation):
 
 
 if __name__ == "__main__":
+    program = import_module("evaluation.single_experiment.seed_17612.program").program
     should_cause = ShouldCause(
         input_var="X1",
         output_var="Y1",
         adjustment_list=[],
-        dir_module_path="evaluation.single_experiment.seed_17612.program",
         dag="evaluation/single_experiment/seed_17612/DAG.dot",
     )
     should_cause.generate_tests()
-    should_cause.execute_tests()
+    should_cause.execute_tests(program)
     
     should_not_cause = ShouldNotCause(
         input_var="X3",
         output_var="Y1",
         adjustment_list=["X1"],
-        dir_module_path="evaluation.single_experiment.seed_17612.program",
         dag="evaluation/single_experiment/seed_17612/DAG.dot",
     )
     should_not_cause.generate_tests()
-    should_not_cause.execute_tests()
+    should_not_cause.execute_tests(program)
