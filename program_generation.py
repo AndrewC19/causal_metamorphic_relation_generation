@@ -64,7 +64,8 @@ def mutInsert(individual, pset, probs):
 
     for i, arg_type in enumerate(new_node.args):
         if i != position:
-            term = choice(pset.terminals[arg_type])
+            term = random.choices(pset.terminals[arg_type], weights=[probs[arg_type][str(t)] for t in pset.terminals[arg_type]])[0]
+            probs[arg_type][str(term)] = probs[arg_type][str(term)]/2
             if isclass(term):
                 term = term()
             new_subtree[i] = term
@@ -72,7 +73,7 @@ def mutInsert(individual, pset, probs):
     new_subtree[position:position + 1] = individual[slice_]
     new_subtree.insert(0, new_node)
     individual[slice_] = new_subtree
-    return individual,
+    return individual
 
 
 def generate(pset, type_=None):
@@ -92,14 +93,12 @@ def generate(pset, type_=None):
     :returns: A grown tree with leaves at possibly different depths
               depending on the condition function.
     """
-    print("Generating Individual")
     if type_ is None:
         type_ = pset.ret
     individual = gp.PrimitiveTree(gp.genFull(pset, 1, 1))
-    probabilities = lambda k: 1
+    probabilities = {typ: {str(term): 1 for term in pset.terminals[typ]} for typ in pset.terminals}
     while not all_variables_in(individual, pset):
-        individual = mutInsert(individual, pset, probabilities)[0]
-    print("Generated Individual")
+        individual = mutInsert(individual, pset, probabilities)
     return individual
 
 
@@ -257,7 +256,7 @@ def construct_statement_stack_from_outputs_and_dag(
 
         # Run the evolutionary algorithm and select the best solution
         _, _ = eaMuPlusLambda(
-            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=1000, halloffame=hof, verbose=True
+            pop, toolbox, mu=1, lambda_=1, cxpb=0, mutpb=1, ngen=1000, halloffame=hof, verbose=False
         )
         assert all_variables_in(hof[0], pset), f"Not all causes in {hof[0]} with fitness {hof[0].fitness.values}"
         statement_stack.append((output_node, PrimitiveTree(hof[0])))
@@ -361,7 +360,6 @@ def synthetic_statement_fitness(individual, causes, pset):
     :param pset: A PrimitiveSet used to generate the individual.
     :return: A float representing the fitness value.
     """
-    print("Evaluating individual")
     causes_in_statement = []
     for node in individual:
         if isinstance(node, Terminal):
@@ -369,7 +367,6 @@ def synthetic_statement_fitness(individual, causes, pset):
 
     causes = [pset.mapping[cause] for cause in causes]
     missing_causes = [cause for cause in causes if cause not in causes_in_statement]
-    print("Evaluated individual")
     return len(missing_causes) + int(contains_self_subtraction(individual)),
 
     # # Remove solutions that do not contain all causes
