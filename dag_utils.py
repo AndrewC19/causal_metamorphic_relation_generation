@@ -19,7 +19,7 @@ def get_non_causal_node_pairs(dag: nx.DiGraph):
     node_pairs = list(combinations(dag.nodes, 2))
 
     # Remove existing causal edges
-    non_causal_node_pairs = [pair for pair in node_pairs if pair not in edges]
+    non_causal_node_pairs = [(c, e) for (c, e) in node_pairs if ((c, e) not in edges) and ((e, c) not in edges)]
 
     # Remove input to input causation, output to input causation, and cycles
     valid_non_causal_node_pairs = []

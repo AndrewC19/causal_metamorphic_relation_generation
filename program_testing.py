@@ -1,10 +1,8 @@
 import argparse
 import networkx as nx
 import importlib
-import sys
 from metamorphic_relation_generation import generate_metamorphic_relations
 
-import re
 
 parser = argparse.ArgumentParser(
     description="Parses args"
