@@ -37,7 +37,7 @@ def get_non_causal_node_pairs(dag: nx.DiGraph):
             cause_index = int(cause_node[1:])
             effect_index = int(effect_node[1:])
             if cause_index > effect_index:
-                pair = (effect_index, cause_index)
+                pair = (effect_node, cause_node)
 
         valid_non_causal_node_pairs.append(pair)
 
