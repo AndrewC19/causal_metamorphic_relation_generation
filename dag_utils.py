@@ -1,6 +1,8 @@
 """A library of utility functions for causal DAGs."""
 import networkx as nx
+from networkx.drawing.nx_pydot import to_pydot
 from itertools import combinations
+from helpers import safe_open_w
 
 
 def get_non_causal_node_pairs(dag: nx.DiGraph):
@@ -77,3 +79,15 @@ def structural_hamming_distance(
     exclusive_true_edges = true_edge_set - other_edge_set
     exclusive_other_edges = other_edge_set - true_edge_set
     return len(exclusive_true_edges) + len(exclusive_other_edges)
+
+
+def to_dot(dag: nx.DiGraph, out_path: str):
+    """Save DAG as a DOT file at the specified out path.
+
+    :param dag: DAG to save as DOT.
+    :param out_path: Path to which the DOT file will be saved.
+    """
+    with safe_open_w(out_path) as dag_file:
+        dot_dag = to_pydot(dag).to_string()
+        dot_dag = dot_dag[:-3] + "}"  # Fixes networkx bug that adds newline to nodes
+        dag_file.write(dot_dag)

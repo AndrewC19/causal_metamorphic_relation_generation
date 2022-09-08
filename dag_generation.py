@@ -1,12 +1,11 @@
 import networkx as nx
 import random
-from networkx.drawing.nx_pydot import to_pydot
 from networkx.exception import NetworkXError
-from helpers import safe_open_w
 from dag_utils import (
     get_non_causal_node_pairs,
     get_exogenous_nodes,
     structural_hamming_distance,
+    to_dot
 )
 
 
@@ -70,9 +69,7 @@ def generate_dag(
     input_output_causal_dag = nx.relabel_nodes(causal_dag, node_map)
 
     if dot_path:
-        with safe_open_w(dot_path) as dag_file:
-            dot_input_output_causal_dag = to_pydot(input_output_causal_dag).to_string()
-            dag_file.write(dot_input_output_causal_dag)
+        to_dot(input_output_causal_dag, dot_path)
 
     return input_output_causal_dag
 
@@ -106,9 +103,7 @@ def mutate_dag(
     assert nx.is_directed_acyclic_graph(dag_to_mutate)
 
     if out_path:
-        with safe_open_w(out_path) as dag_file:
-            dot_dag = to_pydot(dag_to_mutate).to_string()
-            dag_file.write(dot_dag)
+        to_dot(dag_to_mutate, out_path)
 
     return dag_to_mutate
 
