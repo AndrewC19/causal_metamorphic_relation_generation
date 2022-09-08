@@ -1,8 +1,14 @@
+import os.path
 import random
+import glob
+import networkx as nx
+import importlib.util
+import sys
 from time import time
 from argparse import ArgumentParser
 from dag_generation import generate_dag, mutate_dag
 from program_generation import generate_program
+from metamorphic_relation_generation import generate_metamorphic_relations
 from mutation_config_generation import generate_causal_mutation_config
 from helpers import safe_open_w
 from dag_utils import structural_hamming_distance
@@ -12,7 +18,7 @@ def generate_experiment(
     n_dags: int,
     n_nodes: int,
     p_edge: float,
-    experiment_name: str = "experiment",
+    experiment_directory_path: str = "./evaluation/experiment/",
     seed: int = 0
 ):
     """Generate an experiment with user specified DAGs.
@@ -25,10 +31,10 @@ def generate_experiment(
     :param n_dags: Number of DAGs to generate.
     :param n_nodes: Number of nodes per DAG.
     :param p_edge: Probability of an edge being added between any two nodes.
-    :param experiment_name: A string denoting the name of the experiment.
+    :param experiment_directory_path: A string denoting the name of the experiment.
+    :param seed: Seed for reproducibility.
     """
-    experiment_directory = f"./evaluation/{experiment_name}/"
-    params_path = f"{experiment_directory}/params.txt"
+    params_path = f"{experiment_directory_path}/params.txt"
     random.seed(seed)
     total_edges = 0
     total_nodes = 0
@@ -38,7 +44,7 @@ def generate_experiment(
         random.seed(seed)
 
         # Create custom paths for experiment components
-        dag_path = f"{experiment_directory}/seed_{seed}"
+        dag_path = f"{experiment_directory_path}/seed_{seed}"
         dot_path = f"{dag_path}/DAG.dot"
         mutation_path = f"{dag_path}/mutation_config.toml"
         mutant_dag_path = f"{dag_path}/misspecified_dags"
@@ -78,13 +84,32 @@ def generate_experiment(
 
     average_nodes = total_nodes / n_dags
     average_edges = total_edges / n_dags
-    write_params(params_path, n_dags, n_nodes, p_edge, experiment_name,
+    write_params(params_path, n_dags, n_nodes, p_edge, experiment_directory_path,
                  average_nodes, average_edges)
+
+
+def run_experiment(
+    experiment_directory_path: str
+):
+    """Run the specified experiment.
+
+    :param experiment_directory_path: Path to the root level of the experiment directory.
+    """
+    for dag_directory in glob.iglob(f"{experiment_directory_path}/**/"):
+        true_dag = nx.nx_pydot.read_dot(f"{dag_directory}/DAG.dot")
+        mod_spec = importlib.util.spec_from_file_location("program.program", os.path.join(dag_directory, "program.py"))
+        program = importlib.util.module_from_spec(mod_spec)
+        metamorphic_relations = generate_metamorphic_relations(true_dag)
+        sys.modules["program.program"] = program
+        mod_spec.loader.exec_module(program)
+        for metamorphic_relation in metamorphic_relations:
+            metamorphic_relation.generate_tests()
+            metamorphic_relation.execute_tests(program.program)
 
 
 def write_params(
     path: str, n_dags: int, n_nodes: int, p_edge: float, experiment_name: str,
-    a_nodes: int, a_edges: int
+    a_nodes: float, a_edges: float
 ):
     """Write parameter details to a text file at the specified path.
 
@@ -123,14 +148,14 @@ if __name__ == "__main__":
         help="Probability to include edge between any pair of nodes",
         type=float,
     )
-    parser.add_argument("-en", "--experiment", help="Name of the experiment", type=str)
+    parser.add_argument("-en", "--experiment", help="Path to store the experiment", type=str)
     parser.add_argument("-s", "--seed", help="Random seed", type=int)
-
+    parser.add_argument("-t", "--task", help="Task to conduct: 'gen' for generation or 'run' for running experiments.")
     args = parser.parse_args()
     number_of_dags = 1
     number_of_nodes = 10
     probability_of_edge = 0.2
-    experiment_name = "experiment_1"
+    experiment_directory_path = "./evaluation/experiment"
     seed = 0
     if args.dags:
         number_of_dags = args.dags
@@ -139,16 +164,24 @@ if __name__ == "__main__":
     if args.edges:
         probability_of_edge = args.edges
     if args.experiment:
-        experiment_name = args.experiment
+        experiment_directory_path = args.experiment
     if args.seed:
         seed = args.seed
-    start_time = time()
-    generate_experiment(
-        number_of_dags,
-        number_of_nodes,
-        probability_of_edge,
-        experiment_name=experiment_name,
-        seed=seed
-    )
-    end_time = time()
-    print(f"Run time: {end_time - start_time}")
+
+    if (not args.task) or (args.task == 'gen'):
+        start_time = time()
+        generate_experiment(
+            number_of_dags,
+            number_of_nodes,
+            probability_of_edge,
+            experiment_directory_path=experiment_directory_path,
+            seed=seed
+        )
+        end_time = time()
+        print(f"Experiment generation time: {end_time - start_time}s")
+
+    if (not args.task) or (args.task == 'run'):
+        run_start_time = time()
+        run_experiment(experiment_directory_path)
+        run_end_time = time()
+        print(f"Experiment run time: {run_end_time - run_start_time}s")

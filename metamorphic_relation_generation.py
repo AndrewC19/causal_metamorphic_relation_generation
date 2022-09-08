@@ -15,6 +15,10 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
     for node_pair in unique_node_pairs:
         cause, effect = node_pair
 
+        # Do not check causality or independence amongst inputs
+        if "X" in cause and "X" in effect:
+            continue
+
         # Adjust for the parents of the cause and effect to isolate the hypothesised causal effect of interest
         adjustment_set = set(dag.predecessors(cause)) | set(dag.predecessors(effect))
 
@@ -24,17 +28,30 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
 
         # Where an edge is present, test for causality, otherwise test for independence
         if (cause, effect) in dag.edges:
-            metamorphic_relations.append(ShouldCause(cause, effect, list(adjustment_set), dag))
+            adjustment_set -= {cause}  # Remove the cause from adjustment set, where cause --> effect
+            metamorphic_relations.append(ShouldCause(cause, effect, list(adjustment_set - {cause}), dag))
         elif (effect, cause) in dag.edges:
-            metamorphic_relations.append(ShouldCause(effect, cause, list(adjustment_set), dag))
+            adjustment_set -= {effect}  # Remove the effect from adjustment set, where effect --> cause
+            metamorphic_relations.append(ShouldCause(effect, cause, list(adjustment_set - {effect}), dag))
         else:
+            cause, effect = sort_node_pair(cause, effect)
             metamorphic_relations.append(ShouldNotCause(cause, effect, list(adjustment_set), dag))
 
-    # Confirm that a single MR is produced for each unique node pair in the DAG
-    assert len(metamorphic_relations) == len(unique_node_pairs), \
-           f"Mismatch between number of generated MRs and unique node pairs."
-
     return metamorphic_relations
+
+
+def sort_node_pair(node_a, node_b):
+    """Sort a pair of nodes such that inputs (X) precede outputs (Y), and lower nodes (X1) precede higher nodes (X2)."""
+
+    # Case 1: (Y, X) --> (X, Y)
+    if ("Y" in node_a) and ("X" in node_b):
+        return node_b, node_a
+
+    # Case 2: (X2, X1) --> (X1, X2) or (Y2, Y1) --> (Y1, Y2)
+    if (node_a[0] == node_b[0]) and (int(node_a[1:]) > int(node_b[1:])):
+        return node_b, node_a
+
+    return node_a, node_b
 
 
 if __name__ == "__main__":
