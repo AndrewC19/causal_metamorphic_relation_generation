@@ -1,7 +1,9 @@
 import argparse
 import networkx as nx
+import importlib
+import sys
 from metamorphic_relation_generation import generate_metamorphic_relations
-from importlib import import_module
+
 import re
 
 parser = argparse.ArgumentParser(
@@ -19,16 +21,14 @@ parser.add_argument('-d',
                     )
 parser.add_argument('-s',
                     '--seed',
-                    help="A random seed for reproducabilility. Defaults to 0.",
+                    help="A random seed for reproducibility. Defaults to 0.",
                     required=False,
                     )
 args = parser.parse_args()
-
 program_path = args.program
-if program_path.endswith(".py"):
-    program_path = program_path[:-3]
-program_path = re.sub(r'[/\\]', '.', program_path)  # replace slashes with . for module import
-program = import_module(program_path).program  # Import program function from program module
+mod_spec = importlib.util.spec_from_file_location("program.program", program_path)
+program = importlib.util.module_from_spec(mod_spec)
+mod_spec.loader.exec_module(program)
 dag = nx.nx_pydot.read_dot(args.dag)
 
 seed = 0
@@ -37,4 +37,4 @@ if args.seed is not None:
 
 for relation in generate_metamorphic_relations(dag):
     relation.generate_tests()
-    relation.execute_tests(program)
+    relation.execute_tests(program.program)
