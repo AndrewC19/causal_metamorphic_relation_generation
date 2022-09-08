@@ -10,8 +10,6 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
     assert nx.is_directed_acyclic_graph(dag), "Error: Graph is not a DAG."
     metamorphic_relations = []
 
-    print(dag.edges)
-
     # Iterate over all unique pairs of variables in the DAG
     unique_node_pairs = list(combinations(dag.nodes, 2))
     for node_pair in unique_node_pairs:
