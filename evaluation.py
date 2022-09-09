@@ -4,6 +4,7 @@ import glob
 import networkx as nx
 import importlib.util
 import sys
+import shutil
 from time import time
 from argparse import ArgumentParser
 from dag_generation import generate_dag, mutate_dag
@@ -38,35 +39,54 @@ def generate_experiment(
     random.seed(seed)
     total_edges = 0
     total_nodes = 0
+
     for n in range(n_dags):
         # Set seed
         seed = random.randint(1, 100000)
         random.seed(seed)
-
+        print(seed)
         # Create custom paths for experiment components
-        dag_path = f"{experiment_directory_path}/seed_{seed}"
-        dot_path = f"{dag_path}/DAG.dot"
-        mutation_path = f"{dag_path}/mutation_config.toml"
-        mutant_dag_path = f"{dag_path}/misspecified_dags"
+        seed_dir_path = os.path.join(experiment_directory_path, f"seed_{seed}")
+        dag_path = os.path.join(seed_dir_path, "DAG.dot")
+        mutation_config_path = os.path.join(seed_dir_path, "mutation_config.toml")
+        mutant_dags_dir_path = os.path.join(seed_dir_path, "misspecified_dags")
 
         # Generate DAG and record nodes and edges
-        dag = generate_dag(n_nodes, p_edge, seed=seed, dot_path=dot_path)
+        dag = generate_dag(n_nodes, p_edge, seed=seed, dot_path=dag_path)
         total_nodes += len(dag.nodes)
         total_edges += len(dag.edges)
 
         p_g_start_time = time()
         generate_program(
             dag,
-            target_directory_path=dag_path,
-            program_name="program",
+            target_directory_path=seed_dir_path,
+            program_name="program"
         )
         p_g_end_time = time()
         print(f"Program generation run time: {p_g_end_time - p_g_start_time}")
 
+        # Check whether the program is semantically causal
+        program_path = os.path.join(seed_dir_path, "program.py")
+        try:
+            generate_and_execute_metamorphic_relations(program_path, dag_path)
+        except ValueError as e:
+            # The program contain a mathematical function that evaluates to zero
+            shutil.rmtree(seed_dir_path)
+            print("Error: Function evaluates to zero.")
+            print(e)
+            continue
+        except AssertionError as e:
+            # There exist some MRs implied by the DAG that do not hold in the program
+            # Hence, the program is causal in its syntax but not its semantics
+            shutil.rmtree(seed_dir_path)
+            print("Error: Syntactic causation only.")
+            print(e)
+            continue
+
         c_m_g_start_time = time()
         generate_causal_mutation_config(
             dag,
-            target_directory_path=mutation_path,
+            target_directory_path=mutation_config_path,
         )
         c_m_g_end_time = time()
         print(f"Causal mutation generation run time: "
@@ -75,8 +95,8 @@ def generate_experiment(
         # Create increasingly more misspecified DAGs
         m_ds_start_time = time()
         for p_invert in [0.25, 0.5, 0.75, 1]:
-            out_path = f"{mutant_dag_path}/misspecified_dag_{p_invert*100}pct.dot"
-            mutant_dag = mutate_dag(dag, p_invert, out_path)
+            out_path = os.path.join(mutant_dags_dir_path, f"misspecified_dag_{p_invert*100}pct.dot")
+            mutant_dag = mutate_dag(dag, p_invert, out_path, seed)
             shd = structural_hamming_distance(dag, mutant_dag)
             print(shd)
         m_ds_end_time = time()
@@ -96,15 +116,28 @@ def run_experiment(
     :param experiment_directory_path: Path to the root level of the experiment directory.
     """
     for dag_directory in glob.iglob(f"{experiment_directory_path}/**/"):
-        true_dag = nx.nx_pydot.read_dot(f"{dag_directory}/DAG.dot")
-        mod_spec = importlib.util.spec_from_file_location("program.program", os.path.join(dag_directory, "program.py"))
-        program = importlib.util.module_from_spec(mod_spec)
-        metamorphic_relations = generate_metamorphic_relations(true_dag)
-        sys.modules["program.program"] = program
-        mod_spec.loader.exec_module(program)
-        for metamorphic_relation in metamorphic_relations:
-            metamorphic_relation.generate_tests()
-            metamorphic_relation.execute_tests(program.program)
+        dag_path = os.path.join(dag_directory, "DAG.dot")
+        program_path = os.path.join(dag_directory, "program.py")
+        generate_and_execute_metamorphic_relations(program_path, dag_path)
+
+
+def generate_and_execute_metamorphic_relations(program_path, dag_path):
+    """Generate MRs implied by the specified DAG and test against the given program.
+
+    :param program_path: Path to the specified program.
+    :param dag_path: Path to the specified causal DAG representing the causal relationships in the program.
+    """
+    true_dag = nx.nx_pydot.read_dot(dag_path)
+    mod_spec = importlib.util.spec_from_file_location("program.program", program_path)
+    program = importlib.util.module_from_spec(mod_spec)
+    metamorphic_relations = generate_metamorphic_relations(true_dag)
+    sys.modules["program.program"] = program
+    mod_spec.loader.exec_module(program)
+    for metamorphic_relation in metamorphic_relations:
+        print(f"Testing: {metamorphic_relation}")
+        metamorphic_relation.generate_tests()
+        metamorphic_relation.execute_tests(program.program)
+
 
 
 def write_params(

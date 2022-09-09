@@ -77,7 +77,8 @@ def generate_dag(
 def mutate_dag(
         causal_dag: nx.DiGraph,
         p_invert_edge: float,
-        out_path: str = None
+        out_path: str = None,
+        seed: int = 0
 ):
     """Invert potential edges in the causal DAG with a specified probability.
 
@@ -87,8 +88,10 @@ def mutate_dag(
     :param causal_dag: A networkx directed graph representing the causal DAG.
     :param p_invert_edge: Probability that an arbitrary edge (or lack thereof)
     :param out_path: An optional path to save a DOT file.
+    :param seed: Random seed to control non-determinism.
     is inverted.
     """
+    random.seed(seed)
     dag_to_mutate = causal_dag.copy()
     non_causal_node_pairs = get_non_causal_node_pairs(dag_to_mutate)
     invertible_node_pairs = list(dag_to_mutate.edges) + non_causal_node_pairs

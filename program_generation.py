@@ -10,8 +10,7 @@ from time import time
 def generate_program(
     causal_dag: nx.DiGraph,
     target_directory_path: str = "./synthetic_programs",
-    program_name: str = "synthetic_program",
-    seed=0
+    program_name: str = "synthetic_program"
 ):
     """Generate an arithmetic python program with the same causal structure as the provided causal DAG.
 
@@ -29,12 +28,12 @@ def generate_program(
     sorted_output_nodes = sort_causal_dag_nodes(output_nodes, False)
 
     # Use GP to construct a series of statements (program) with the same causal structure as the DAG
-    gp_start_time = time()
+    pg_start_time = time()
     statement_stack = construct_statement_stack_from_outputs_and_dag(
         output_nodes, causal_dag
     )
-    gp_end_time = time()
-    print(f"GP Time: {gp_end_time - gp_start_time}s")
+    pg_end_time = time()
+    print(f"GP Time: {pg_end_time - pg_start_time}s")
 
     # Write the program
     format_start_time = time()
@@ -105,11 +104,10 @@ def construct_statement_stack_from_outputs_and_dag(
 
     for output_node in nodes_ordered_for_traversal:
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
-        coefficients = [random.randint(0, 10) for cause in causes]
+        coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
         expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
-        expr += f" + {random.randint(0, 10)}"
-
-        statement_stack.append(f"\t{output_node} = {expr}\n")
+        expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
+        statement_stack.append(f"\tif {output_node} is None:\n\t\t{output_node} = {expr}\n")
     return statement_stack
 
 

@@ -72,3 +72,6 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
 
     with safe_open_w(target_directory_path) as toml_file:
         tomlkit.dump(toml_document, toml_file)
+
+    print(f"Generated {len(edge_addition_mutations)} VariableInserter mutations.")
+    print(f"Generated {len(edge_deletion_mutations)} VariableReplacer mutations.")
