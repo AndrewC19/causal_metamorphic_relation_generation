@@ -34,5 +34,5 @@ if args.seed is not None:
     seed = int(args.seed)
 
 for relation in generate_metamorphic_relations(dag):
-    relation.generate_tests()
+    relation.generate_tests(seed=seed)
     relation.execute_tests(program.program)
