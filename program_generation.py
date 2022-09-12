@@ -8,32 +8,44 @@ from time import time
 
 
 def generate_program(
-    causal_dag: nx.DiGraph,
-    target_directory_path: str = "./synthetic_programs",
-    program_name: str = "synthetic_program"
+        causal_dag: nx.DiGraph,
+        p_conditional: float = 0.0,
+        target_directory_path: str = "./synthetic_programs",
+        program_name: str = "synthetic_program"
 ):
     """Generate an arithmetic python program with the same causal structure as the provided causal DAG.
 
     :param causal_dag: A networkx graph representing a causal DAG. This DAG will be used to produce a python program
                        with the same causal structure.
+    :param p_conditional: Probability that an arbitrary node is made conditional. This will be used to create an if
+                          statement.
     :param target_directory_path: The path of the directory to which the program will be saved.
     :param program_name: The name the program will be saved as (excluding the .py extension).
     """
     random.seed(0)
-    input_nodes = [node for node in causal_dag.nodes if "X" in node]
-    output_nodes = [node for node in causal_dag.nodes if "Y" in node]
+
+    # With p_conditional probability, convert all non-terminal nodes to conditional type
+    nodes_with_types = []
+    for node in causal_dag.nodes:
+        node_with_type = (node, "numerical")
+        if (causal_dag.out_degree(node) > 0) and (random.random() < p_conditional):
+            node_with_type = (node, "categorical")
+        nodes_with_types.append(node_with_type)
+
+    input_nodes = [(node, _) for (node, _) in nodes_with_types if "X" in node]
+    output_nodes = [(node, _) for (node, _) in nodes_with_types if "Y" in node]
 
     # Sort input and output nodes in ascending order
     sorted_input_nodes = sort_causal_dag_nodes(input_nodes, False)
     sorted_output_nodes = sort_causal_dag_nodes(output_nodes, False)
 
-    # Use GP to construct a series of statements (program) with the same causal structure as the DAG
+    # Construct a series of statements (program) with the same causal structure as the DAG
     pg_start_time = time()
     statement_stack = construct_statement_stack_from_outputs_and_dag(
         output_nodes, causal_dag
     )
     pg_end_time = time()
-    print(f"GP Time: {pg_end_time - pg_start_time}s")
+    print(f"Program Generation Time: {pg_end_time - pg_start_time}s")
 
     # Write the program
     format_start_time = time()
@@ -58,12 +70,25 @@ def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
     :param reverse: Whether to reverse the order (i.e. descending order).
     :return:
     """
-    nodes.sort(key=lambda node: int(node[1:]), reverse=reverse)
+
+    def get_typed_nodes_numerical_value(typed_node):
+        """Get the numerical value of a typed node.
+
+        For example, (X1, "categorical) --> 1.
+
+        :param typed_node: A typed node which is pair comprising a label (e.g. X1) and a type (categorical or
+                           numerical).
+        :return: The integer value of the typed node.
+        """
+        node, _ = typed_node
+        return int(node[1:])
+
+    nodes.sort(key=lambda typed_node: get_typed_nodes_numerical_value(typed_node), reverse=reverse)
     return nodes
 
 
 def construct_statement_stack_from_outputs_and_dag(
-    output_nodes: List, causal_dag: nx.DiGraph, constants_ratio: float = 0.2
+        output_nodes: List, causal_dag: nx.DiGraph
 ):
     """Construct a stack of statements for each output in the causal DAG, with the same causal structure.
 
@@ -82,14 +107,13 @@ def construct_statement_stack_from_outputs_and_dag(
     :param output_nodes: A list of outputs that appear in the causal DAG.
     :param causal_dag: A networkx DiGraph representing a causal DAG from which the structure of the program will be
                        inferred.
-    :param constants_ratio: Ratio of constants to variables to add to target (0.2 by default).
     :return: A list of syntax trees (PrimitiveTrees) representing statements that can be executed in python.
     """
     terminal_output_nodes = [
-        node for node in output_nodes if not causal_dag.out_degree(node)
+        (node, _) for (node, _) in output_nodes if not causal_dag.out_degree(node)
     ]
     intermediate_output_nodes = [
-        node for node in output_nodes if causal_dag.out_degree(node) > 0
+        (node, _) for (node, _) in output_nodes if causal_dag.out_degree(node) > 0
     ]
 
     # Split outputs into terminal and intermediate nodes and order in descending order for traversal
@@ -98,26 +122,27 @@ def construct_statement_stack_from_outputs_and_dag(
         intermediate_output_nodes, True
     )
     nodes_ordered_for_traversal = (
-        sorted_terminal_output_nodes + sorted_intermediate_output_nodes
+            sorted_terminal_output_nodes + sorted_intermediate_output_nodes
     )
     statement_stack = []
 
     for output_node in nodes_ordered_for_traversal:
-        causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
+        output_var, _type = output_node
+        causes = [cause for (cause, effect) in causal_dag.in_edges(output_var)]
         coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
         expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
         expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
-        statement_stack.append(f"\tif {output_node} is None:\n\t\t{output_node} = {expr}\n")
+        statement_stack.append(f"\tif {output_var} is None:\n\t\t{output_var} = {expr}\n")
     return statement_stack
 
 
 def write_statement_stack_to_python_file(
-    statement_stack,
-    sorted_input_nodes,
-    sorted_output_nodes,
-    causal_dag,
-    target_directory_path,
-    program_name,
+        statement_stack,
+        sorted_input_nodes,
+        sorted_output_nodes,
+        causal_dag,
+        target_directory_path,
+        program_name,
 ):
     """Convert a statement stack to a python program and save under the synthetic_programs directory.
 
@@ -129,18 +154,18 @@ def write_statement_stack_to_python_file(
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
     imports_str = "from math import log\n\n\n"
-    input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
-    input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
+    input_args_str = "".join([f"\t{x}: int,\n" for x, _ in sorted_input_nodes])
+    input_args_str += "".join([f"\t{x}: int = None,\n" for x, _ in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
     doc_str = '\t"""Causal structure:\n'
     doc_str += "".join([f"\t\t{edge}\n" for edge in causal_dag.edges])
     doc_str += '\t"""\n'
     return_str = (
-        "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
+            "\treturn {" + "".join([f"'{y}': {y}, " for y, _ in sorted_output_nodes])[:-2] + "}\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
     with safe_open_w(
-        os.path.join(target_directory_path, f"{program_name}.py")
+            os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
         program_file.write(imports_str)
         program_file.write(method_definition_str)
@@ -161,4 +186,4 @@ def does_not_contain_list(x):
 
 if __name__ == "__main__":
     dag = generate_dag(10, 1)
-    generate_program(dag, target_directory_path="./evaluation/", program_name="test_program")
+    generate_program(dag, 0.5, target_directory_path="./evaluation/", program_name="test_program")
