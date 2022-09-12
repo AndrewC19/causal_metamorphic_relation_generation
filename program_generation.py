@@ -215,7 +215,7 @@ def get_mccabe_complexity(program_path):
     tree = compile(code, program_path, "exec", ast.PyCF_ONLY_AST)
     visitor = mc.PathGraphingAstVisitor()
     visitor.preorder(tree, visitor)
-    program_name = program_path.split('/')[-1][:-3]
+    program_name = os.path.basename(program_path)[:-3]
     return visitor.graphs[program_name].complexity()
 
 
