@@ -115,10 +115,17 @@ def run_experiment(
 
     :param experiment_directory_path: Path to the root level of the experiment directory.
     """
-    for dag_directory in glob.iglob(f"{experiment_directory_path}/**/"):
+    for dag_directory in glob.iglob(os.path.join(experiment_directory_path, "**/")):
+        print(f"Experiment path: {dag_directory}")
         dag_path = os.path.join(dag_directory, "DAG.dot")
         program_path = os.path.join(dag_directory, "program.py")
         generate_and_execute_metamorphic_relations(program_path, dag_path)
+        mutated_dag_directory = os.path.join(dag_directory, "misspecified_dags/")
+        for mutated_dag_path in glob.iglob(os.path.join(mutated_dag_directory, "*.dot")):
+            try:
+                generate_and_execute_metamorphic_relations(program_path, mutated_dag_path)
+            except AssertionError as e:
+                print(e)
 
 
 def generate_and_execute_metamorphic_relations(program_path, dag_path):
@@ -137,8 +144,6 @@ def generate_and_execute_metamorphic_relations(program_path, dag_path):
         print(f"Testing: {metamorphic_relation}")
         metamorphic_relation.generate_tests()
         metamorphic_relation.execute_tests(program.program)
-
-
 
 def write_params(
     path: str, n_dags: int, n_nodes: int, p_edge: float, experiment_name: str,
