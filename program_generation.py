@@ -131,8 +131,8 @@ def construct_statement_stack_from_outputs_and_dag(
         expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
         expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
 
-        statement = ""
-        statement += f"\tif {output_node} is None:\n"
+        # Add if not none before each output statement for controllability
+        statement = f"\tif {output_node} is None:\n"
         categorical_parents = [cause for cause in causes if causal_dag.nodes[cause]["n_type"] == "categorical"]
         if categorical_parents:
             # Place the linear equation within an if statement whose predicate is a function of all categorical causes
@@ -148,9 +148,8 @@ def construct_statement_stack_from_outputs_and_dag(
             statement += f"\t\telse:\n"
             statement += f"\t\t\t{output_node} = {else_expr}\n"
 
-            # Add the if-then-else block to the statement stack
-            statement_stack.append(statement)
         else:
+            # No conditional parents so no if-then-else
             statement += f"\t\t{output_node} = {expr}\n"
         statement_stack.append(statement)
 
@@ -220,5 +219,5 @@ def get_mccabe_complexity(program_path):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(10, 0.2)
-    generate_program(dag, 0.3, target_directory_path="./evaluation/", program_name="test_program")
+    dag = generate_dag(5, 0.3)
+    generate_program(dag, 0.67, target_directory_path="./evaluation/", program_name="test_program")
