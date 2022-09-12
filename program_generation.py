@@ -1,10 +1,13 @@
 import networkx as nx
 import random
 import os
+import ast
+import mccabe as mc
 from dag_generation import generate_dag
 from typing import List, Iterable
 from helpers import safe_open_w
 from time import time
+
 
 
 def generate_program(
@@ -25,15 +28,16 @@ def generate_program(
     random.seed(0)
 
     # With p_conditional probability, convert all non-terminal nodes to conditional type
-    nodes_with_types = []
+    nodes_with_types = {}
     for node in causal_dag.nodes:
-        node_with_type = (node, "numerical")
+        n_type = "numerical"
         if (causal_dag.out_degree(node) > 0) and (random.random() < p_conditional):
-            node_with_type = (node, "categorical")
-        nodes_with_types.append(node_with_type)
+            n_type = "categorical"
+        nodes_with_types[node] = {"n_type": n_type}
+    nx.set_node_attributes(causal_dag, nodes_with_types)
 
-    input_nodes = [(node, _) for (node, _) in nodes_with_types if "X" in node]
-    output_nodes = [(node, _) for (node, _) in nodes_with_types if "Y" in node]
+    input_nodes = [node for node in causal_dag.nodes if "X" in node]
+    output_nodes = [node for node in causal_dag.nodes if "Y" in node]
 
     # Sort input and output nodes in ascending order
     sorted_input_nodes = sort_causal_dag_nodes(input_nodes, False)
@@ -59,6 +63,12 @@ def generate_program(
     )
     format_end_time = time()
     print(f"Format time: {format_end_time - format_start_time}s")
+    program_path = os.path.join(target_directory_path, f"{program_name}.py")
+
+    # Compute the McCabe complexity: we subtract number of outputs since each computation has a superfluous if statement
+    # that allows us to directly intervene on output values
+    mccabe_complexity = get_mccabe_complexity(program_path) - len(output_nodes)
+    print(f"McCabe complexity: {mccabe_complexity}")
 
 
 def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
@@ -70,20 +80,7 @@ def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
     :param reverse: Whether to reverse the order (i.e. descending order).
     :return:
     """
-
-    def get_typed_nodes_numerical_value(typed_node):
-        """Get the numerical value of a typed node.
-
-        For example, (X1, "categorical) --> 1.
-
-        :param typed_node: A typed node which is pair comprising a label (e.g. X1) and a type (categorical or
-                           numerical).
-        :return: The integer value of the typed node.
-        """
-        node, _ = typed_node
-        return int(node[1:])
-
-    nodes.sort(key=lambda typed_node: get_typed_nodes_numerical_value(typed_node), reverse=reverse)
+    nodes.sort(key=lambda node: int(node[1:]), reverse=reverse)
     return nodes
 
 
@@ -110,10 +107,10 @@ def construct_statement_stack_from_outputs_and_dag(
     :return: A list of syntax trees (PrimitiveTrees) representing statements that can be executed in python.
     """
     terminal_output_nodes = [
-        (node, _) for (node, _) in output_nodes if not causal_dag.out_degree(node)
+        node for node in output_nodes if not causal_dag.out_degree(node)
     ]
     intermediate_output_nodes = [
-        (node, _) for (node, _) in output_nodes if causal_dag.out_degree(node) > 0
+        node for node in output_nodes if causal_dag.out_degree(node) > 0
     ]
 
     # Split outputs into terminal and intermediate nodes and order in descending order for traversal
@@ -127,12 +124,36 @@ def construct_statement_stack_from_outputs_and_dag(
     statement_stack = []
 
     for output_node in nodes_ordered_for_traversal:
-        output_var, _type = output_node
-        causes = [cause for (cause, effect) in causal_dag.in_edges(output_var)]
+
+        # Construct a linear equation for each node based on its causes
+        causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
         coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
         expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
         expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
-        statement_stack.append(f"\tif {output_var} is None:\n\t\t{output_var} = {expr}\n")
+
+        statement = ""
+        statement += f"\tif {output_node} is None:\n"
+        categorical_parents = [cause for cause in causes if causal_dag.nodes[cause]["n_type"] == "categorical"]
+        if categorical_parents:
+            # Place the linear equation within an if statement whose predicate is a function of all categorical causes
+            predicate = " + ".join([f"{x}" for x in categorical_parents]) + " >= 0"
+
+            # In the true branch (if), place the full linear equation
+            statement += f"\t\tif {predicate}:\n"
+            statement += f"\t\t\t{output_node} = {expr}\n"
+
+            # In the false branch (else), place the linear equation without the non-categorical parents
+            else_expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, categorical_parents)])
+            else_expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
+            statement += f"\t\telse:\n"
+            statement += f"\t\t\t{output_node} = {else_expr}\n"
+
+            # Add the if-then-else block to the statement stack
+            statement_stack.append(statement)
+        else:
+            statement += f"\t\t{output_node} = {expr}\n"
+        statement_stack.append(statement)
+
     return statement_stack
 
 
@@ -154,14 +175,14 @@ def write_statement_stack_to_python_file(
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
     imports_str = "from math import log\n\n\n"
-    input_args_str = "".join([f"\t{x}: int,\n" for x, _ in sorted_input_nodes])
-    input_args_str += "".join([f"\t{x}: int = None,\n" for x, _ in sorted_output_nodes])
+    input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
+    input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
     doc_str = '\t"""Causal structure:\n'
     doc_str += "".join([f"\t\t{edge}\n" for edge in causal_dag.edges])
     doc_str += '\t"""\n'
     return_str = (
-            "\treturn {" + "".join([f"'{y}': {y}, " for y, _ in sorted_output_nodes])[:-2] + "}\n"
+            "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
     statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
     with safe_open_w(
@@ -184,6 +205,20 @@ def does_not_contain_list(x):
     return True
 
 
+def get_mccabe_complexity(program_path):
+    """Get McCabe complexity for a program using Ned's script: https://github.com/PyCQA/mccabe.
+
+    :param program_path: Path to the python program whose complexity we wish to measure.
+    :return: McCabe complexity score for the program.
+    """
+    code = mc._read(program_path)
+    tree = compile(code, program_path, "exec", ast.PyCF_ONLY_AST)
+    visitor = mc.PathGraphingAstVisitor()
+    visitor.preorder(tree, visitor)
+    program_name = program_path.split('/')[-1][:-3]
+    return visitor.graphs[program_name].complexity()
+
+
 if __name__ == "__main__":
-    dag = generate_dag(10, 1)
-    generate_program(dag, 0.5, target_directory_path="./evaluation/", program_name="test_program")
+    dag = generate_dag(10, 0.2)
+    generate_program(dag, 0.3, target_directory_path="./evaluation/", program_name="test_program")
