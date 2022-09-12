@@ -186,7 +186,6 @@ def write_statement_stack_to_python_file(
     with safe_open_w(
             os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
-        program_file.write(imports_str)
         program_file.write(method_definition_str)
         program_file.write(doc_str)
         program_file.writelines(statement_stack)
