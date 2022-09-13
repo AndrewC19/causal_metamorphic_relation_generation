@@ -2,7 +2,7 @@
 module-path = "program.py"
 timeout = 20.0
 excluded-modules = []
-test-command = "python ../../../program_testing.py -p program.py -d DAG.dot"
+test-command = "python ../../../program_testing.py -p program.py -d DAG.dot -c"
 
 [cosmic-ray.distributor]
 name = "local"

@@ -29,7 +29,7 @@ class CausalMetamorphicRelation(ABC):
         ...
 
     @abstractmethod
-    def execute_tests(self, program):
+    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
         ...
 
 
@@ -50,11 +50,9 @@ class ShouldCause(CausalMetamorphicRelation):
         assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
         assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
         samples = pd.DataFrame(
-            np.random.rand(sample_size, len(columns)),
+            np.random.randint(-10, 10, size=(1, len(columns))),
             columns=columns,
         )
-        for col in columns[:-1]:
-            samples[col] = samples[col] * 10
         samples[X_prime] = samples[X_prime] * 10
         X_values = samples[[X]]
         X_prime_values = samples[[X_prime]]
@@ -71,12 +69,23 @@ class ShouldCause(CausalMetamorphicRelation):
         )
 
 
-    def execute_tests(self, program):
+    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
+        failures = []
         for run in self.tests:
             x_value, x_prime_value, other_inputs, y, independence = run
             control = program(**(other_inputs | x_value))[y]
             treatment = program(**(other_inputs | x_prime_value))[y]
-            assert control != treatment, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
+            ok = control != treatment
+            if not continue_after_failure:
+                assert ok, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
+            if not ok:
+                failures.append({
+                    "control_inputs": (other_inputs | x_value),
+                    "control_outcome": control,
+                    "treatment_inputs": (other_inputs | x_prime_value),
+                    "treatment_outcome": treatment
+                })
+        return failures
 
     def __str__(self):
         metamorphic_relation_str = f"{self.input_var} --> {self.output_var}"
@@ -107,11 +116,9 @@ class ShouldNotCause(CausalMetamorphicRelation):
             set(inputs_prime)), f"Input prime names not unique {inputs_prime} {count(inputs_prime)}"
         assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
         samples = pd.DataFrame(
-            np.random.rand(sample_size, len(columns)),
+            np.random.randint(-10, 10, size=(1, len(columns))),
             columns=columns,
         )
-        for col in columns:
-            samples[col] = samples[col] * 10
         X_values = samples[inputs]
         X_prime_values = samples[inputs_prime]
         Z_values = samples[self.adjustment_list]
@@ -128,12 +135,23 @@ class ShouldNotCause(CausalMetamorphicRelation):
             )
         )
 
-    def execute_tests(self, program):
+    def execute_tests(self, program, continue_after_failure=False) -> List[str]:
+        failures = []
         for run in self.tests:
             x_value, x_prime_value, other_inputs, y, independence = run
             control = program(**(other_inputs | x_value))[y]
             treatment = program(**(other_inputs | x_prime_value))[y]
-            assert control == treatment, f"Expected control {control} to equal treatment {treatment} for\n{run}"
+            ok = control == treatment
+            if not continue_after_failure:
+                assert ok, f"Expected control {control} to equal treatment {treatment} for\n{run}"
+            if not ok:
+                failures.append({
+                    "control_inputs": (other_inputs | x_value),
+                    "control_outcome": control,
+                    "treatment_inputs": (other_inputs | x_prime_value),
+                    "treatment_outcome": treatment
+                })
+            return failures
 
     def __str__(self):
         metamorphic_relation_string = f"{self.input_var} ⫫ {self.output_var}"
