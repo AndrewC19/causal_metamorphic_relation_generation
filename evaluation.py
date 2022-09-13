@@ -84,7 +84,7 @@ def generate_experiment(
             shd = structural_hamming_distance(dag, mutant_dag)
             print(shd)
             generate_causal_mutation_config(
-                mutant_dag,
+                dag,
                 target_directory_path=out_path.replace("DAG.dot", "mutation_config.toml"),
             )
         m_ds_end_time = time()

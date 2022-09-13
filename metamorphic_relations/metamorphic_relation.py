@@ -51,7 +51,7 @@ class ShouldCause(CausalMetamorphicRelation):
         assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
         samples = pd.DataFrame(
             np.random.randint(-10, 10, size=(1, len(columns))),
-            columns=columns,
+            columns=sorted(columns),
         )
         samples[X_prime] = samples[X_prime] * 10
         X_values = samples[[X]]
@@ -117,7 +117,7 @@ class ShouldNotCause(CausalMetamorphicRelation):
         assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
         samples = pd.DataFrame(
             np.random.randint(-10, 10, size=(1, len(columns))),
-            columns=columns,
+            columns=sorted(columns),
         )
         X_values = samples[inputs]
         X_prime_values = samples[inputs_prime]

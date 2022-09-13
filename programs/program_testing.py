@@ -48,6 +48,7 @@ if args.seed is not None:
 
 results = []
 for relation in generate_metamorphic_relations(dag):
+    print(relation)
     result = {"relation": str(relation), "total": 0, "failures": []}
     relation.generate_tests(seed=seed)
     result["total"] += len(relation.tests)
