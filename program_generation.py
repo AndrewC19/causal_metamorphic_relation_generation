@@ -4,10 +4,10 @@ import os
 import ast
 import mccabe as mc
 from dag_generation import generate_dag
-from typing import List, Iterable
+from dag_utils import sort_causal_dag_nodes, get_output_order
+from typing import Iterable
 from helpers import safe_open_w
 from time import time
-
 
 
 def generate_program(
@@ -32,7 +32,7 @@ def generate_program(
     for node in causal_dag.nodes:
         n_type = "numerical"
         if (causal_dag.out_degree(node) > 0) and (random.random() < p_conditional):
-            n_type = "categorical"
+            n_type = "conditional"
         nodes_with_types[node] = {"n_type": n_type}
     nx.set_node_attributes(causal_dag, nodes_with_types)
 
@@ -45,9 +45,7 @@ def generate_program(
 
     # Construct a series of statements (program) with the same causal structure as the DAG
     pg_start_time = time()
-    statement_stack = construct_statement_stack_from_outputs_and_dag(
-        output_nodes, causal_dag
-    )
+    statement_stack = construct_statement_stack_from_dag(causal_dag)
     pg_end_time = time()
     print(f"Program Generation Time: {pg_end_time - pg_start_time}s")
 
@@ -65,66 +63,31 @@ def generate_program(
     print(f"Format time: {format_end_time - format_start_time}s")
     program_path = os.path.join(target_directory_path, f"{program_name}.py")
 
-    # Compute the McCabe complexity: we subtract number of outputs since each computation has a superfluous if statement
-    # that allows us to directly intervene on output values
+    # Compute the McCabe complexity: we subtract number of outputs since each computation
+    # has a superfluous if statement that allows us to directly intervene on output values
     mccabe_complexity = get_mccabe_complexity(program_path) - len(output_nodes)
     print(f"McCabe complexity: {mccabe_complexity}")
 
 
-def sort_causal_dag_nodes(nodes: List, reverse: bool = False) -> List:
-    """Sort a list of causal DAG nodes based on the numerical value only (i.e. not the X or Y in front).
-
-    This method assumes that all nodes start with a single character and are strictly followed by integers.
-
-    :param nodes: A list of strings representing nodes.
-    :param reverse: Whether to reverse the order (i.e. descending order).
-    :return:
-    """
-    nodes.sort(key=lambda node: int(node[1:]), reverse=reverse)
-    return nodes
-
-
-def construct_statement_stack_from_outputs_and_dag(
-        output_nodes: List, causal_dag: nx.DiGraph
-):
+def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
     """Construct a stack of statements for each output in the causal DAG, with the same causal structure.
 
-    This function iterates over the outputs in the causal DAG and uses GP to construct an arithmetic function
-    (referred to as a statement herein) with the same causal structure. For example, for {X1, X2} --> Y, suitable
-    functions include Y = add(X1, X2) and Y = sub(X2, X1).
+    This function iterates over the outputs in the causal DAG and constructs linear arithmetic functions with the same
+    causal structure (referred to as a statement herein). For example, for {X1, X2} --> Y ==> Y = (2*X1) + (-4*X2) + 10.
 
     Our algorithm starts by constructing statements for terminal outputs and then proceeds to intermediate outputs.
     This results in a stack of statements that, upon reversal, can be piped into a python file to form the body of an
     executable function with the same causal structure as the specified causal DAG.
 
-    Our GP uses a fitness function that ensures all solutions (statements) are affected by all causes (i.e. every cause
-    of the output is in the statement). In addition, the fitness function prioritises solutions with the shortest
-    chain of operators and values.
-
-    :param output_nodes: A list of outputs that appear in the causal DAG.
     :param causal_dag: A networkx DiGraph representing a causal DAG from which the structure of the program will be
-                       inferred.
-    :return: A list of syntax trees (PrimitiveTrees) representing statements that can be executed in python.
+                       generated.
+    :return: A list of strings representing statements that can be executed in python.
     """
-    terminal_output_nodes = [
-        node for node in output_nodes if not causal_dag.out_degree(node)
-    ]
-    intermediate_output_nodes = [
-        node for node in output_nodes if causal_dag.out_degree(node) > 0
-    ]
-
-    # Split outputs into terminal and intermediate nodes and order in descending order for traversal
-    sorted_terminal_output_nodes = sort_causal_dag_nodes(terminal_output_nodes, True)
-    sorted_intermediate_output_nodes = sort_causal_dag_nodes(
-        intermediate_output_nodes, True
-    )
-    nodes_ordered_for_traversal = (
-            sorted_terminal_output_nodes + sorted_intermediate_output_nodes
-    )
+    nodes_ordered_for_traversal = get_output_order(causal_dag)
+    nodes_ordered_for_traversal.reverse()
     statement_stack = []
 
     for output_node in nodes_ordered_for_traversal:
-
         # Construct a linear equation for each node based on its causes
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
         coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
@@ -133,17 +96,19 @@ def construct_statement_stack_from_outputs_and_dag(
 
         # Add if not none before each output statement for controllability
         statement = f"\tif {output_node} is None:\n"
-        categorical_parents = [cause for cause in causes if causal_dag.nodes[cause]["n_type"] == "categorical"]
-        if categorical_parents:
-            # Place the linear equation within an if statement whose predicate is a function of all categorical causes
-            predicate = " + ".join([f"{x}" for x in categorical_parents]) + " >= 0"
+        conditional_parents = [cause for cause in causes if causal_dag.nodes[cause]["n_type"] == "conditional"]
+
+        # Add conditional behaviour for conditional nodes
+        if conditional_parents:
+            # Place the linear equation within an if statement whose predicate is a function of all conditional causes
+            predicate = " + ".join([f"{x}" for x in conditional_parents]) + " >= 0"
 
             # In the true branch (if), place the full linear equation
             statement += f"\t\tif {predicate}:\n"
             statement += f"\t\t\t{output_node} = {expr}\n"
 
-            # In the false branch (else), place the linear equation without the non-categorical parents
-            else_expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, categorical_parents)])
+            # In the false branch (else), place the linear equation without the non-conditional parents
+            else_expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, conditional_parents)])
             else_expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
             statement += f"\t\telse:\n"
             statement += f"\t\t\t{output_node} = {else_expr}\n"
