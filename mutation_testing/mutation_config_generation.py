@@ -3,7 +3,7 @@ import networkx as nx
 import tomlkit
 from tomlkit import aot, inline_table, nl, table, document, array
 from helpers import safe_open_w
-from dag_utils import get_non_causal_node_pairs
+from dags.dag_utils import get_non_causal_node_pairs
 
 
 def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str):
@@ -33,7 +33,7 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
     cosmic_ray_table.add("module-path", "../../program.py")
     cosmic_ray_table.add("timeout", 20.0)
     cosmic_ray_table.add("excluded-modules", [])
-    cosmic_ray_table.add("test-command", "python ../../../../../program_testing.py -p ../../program.py -d DAG.dot -c")
+    cosmic_ray_table.add("test-command", "python ../../../../../programs/program_testing.py -p ../../program.py -d DAG.dot -c")
     toml_document.add("cosmic-ray", cosmic_ray_table)
     toml_document.add(nl())
 

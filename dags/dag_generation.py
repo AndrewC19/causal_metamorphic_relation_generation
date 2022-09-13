@@ -1,7 +1,7 @@
 import networkx as nx
 import random
 from networkx.exception import NetworkXError
-from dag_utils import (
+from dags.dag_utils import (
     get_non_causal_node_pairs,
     get_exogenous_nodes,
     structural_hamming_distance,

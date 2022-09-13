@@ -7,12 +7,12 @@ import sys
 import shutil
 from time import time
 from argparse import ArgumentParser
-from dag_generation import generate_dag, mutate_dag
-from program_generation import generate_program
-from metamorphic_relation_generation import generate_metamorphic_relations
-from mutation_config_generation import generate_causal_mutation_config
+from dags.dag_generation import generate_dag, mutate_dag
+from programs.program_generation import generate_program
+from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
+from mutation_testing.mutation_config_generation import generate_causal_mutation_config
 from helpers import safe_open_w
-from dag_utils import structural_hamming_distance
+from dags.dag_utils import structural_hamming_distance
 
 
 def generate_experiment(
@@ -66,24 +66,6 @@ def generate_experiment(
         )
         p_g_end_time = time()
         print(f"Program generation run time: {p_g_end_time - p_g_start_time}")
-
-        # Check whether the program is semantically causal
-        program_path = os.path.join(seed_dir_path, "program.py")
-        try:
-            generate_and_execute_metamorphic_relations(program_path, dag_path)
-        except ValueError as e:
-            # The program contain a mathematical function that evaluates to zero
-            shutil.rmtree(seed_dir_path)
-            print("Error: Function evaluates to zero.")
-            print(e)
-            continue
-        except AssertionError as e:
-            # There exist some MRs implied by the DAG that do not hold in the program
-            # Hence, the program is causal in its syntax but not its semantics
-            shutil.rmtree(seed_dir_path)
-            print("Error: Syntactic causation only.")
-            print(e)
-            continue
 
         c_m_g_start_time = time()
         generate_causal_mutation_config(

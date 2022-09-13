@@ -165,7 +165,7 @@ class ShouldNotCause(CausalMetamorphicRelation):
 
 if __name__ == "__main__":
     program = import_module("evaluation.single_experiment.seed_17612.program").program
-    dag = nx.DiGraph(nx.nx_pydot.read_dot("evaluation/single_experiment/seed_17612/DAG.dot"))
+    dag = nx.DiGraph(nx.nx_pydot.read_dot("../evaluation/single_experiment/seed_17612/DAG.dot"))
     print(dag)
     should_cause = ShouldCause(
         input_var="X1",
