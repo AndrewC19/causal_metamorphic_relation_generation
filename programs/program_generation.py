@@ -3,8 +3,8 @@ import random
 import os
 import ast
 import mccabe as mc
-from dag_generation import generate_dag
-from dag_utils import sort_causal_dag_nodes, get_output_order
+from dags.dag_generation import generate_dag
+from dags.dag_utils import sort_causal_dag_nodes, get_output_order
 from typing import Iterable
 from helpers import safe_open_w
 from time import time
@@ -183,4 +183,4 @@ def get_mccabe_complexity(program_path):
 
 if __name__ == "__main__":
     dag = generate_dag(5, 0.3)
-    generate_program(dag, 0.67, target_directory_path="./evaluation/", program_name="test_program")
+    generate_program(dag, 0.67, target_directory_path="../evaluation/", program_name="test_program")

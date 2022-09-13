@@ -7,12 +7,12 @@ import sys
 import shutil
 from time import time
 from argparse import ArgumentParser
-from dag_generation import generate_dag, mutate_dag
-from program_generation import generate_program
-from metamorphic_relation_generation import generate_metamorphic_relations
-from mutation_config_generation import generate_causal_mutation_config
+from dags.dag_generation import generate_dag, mutate_dag
+from programs.program_generation import generate_program
+from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
+from mutation_testing.mutation_config_generation import generate_causal_mutation_config
 from helpers import safe_open_w
-from dag_utils import structural_hamming_distance
+from dags.dag_utils import structural_hamming_distance
 
 
 def generate_experiment(

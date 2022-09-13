@@ -1,7 +1,7 @@
 import argparse
 import networkx as nx
 import importlib
-from metamorphic_relation_generation import generate_metamorphic_relations
+from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 
 
 parser = argparse.ArgumentParser(
