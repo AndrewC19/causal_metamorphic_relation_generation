@@ -13,6 +13,7 @@ def generate_causal_mutation_config(dag: nx.DiGraph, target_directory_path: str)
     :param target_directory_path: The path to which the mutation config will be saved.
     """
     edge_deletion_mutations = []
+
     for edge in dag.edges:
         cause_variable, effect_variable = edge
         edge_deletion_mutations.append({'cause_variable': cause_variable,

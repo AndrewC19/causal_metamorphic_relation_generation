@@ -19,6 +19,7 @@ def generate_experiment(
     n_dags: int,
     n_nodes: int,
     p_edge: float,
+    p_conditional: float,
     experiment_directory_path: str = "./evaluation/experiment/",
     seed: int = 0
 ):
@@ -32,6 +33,7 @@ def generate_experiment(
     :param n_dags: Number of DAGs to generate.
     :param n_nodes: Number of nodes per DAG.
     :param p_edge: Probability of an edge being added between any two nodes.
+    :param p_conditional: Probability of a node being made conditional.
     :param experiment_directory_path: A string denoting the name of the experiment.
     :param seed: Seed for reproducibility.
     """
@@ -59,6 +61,7 @@ def generate_experiment(
         p_g_start_time = time()
         generate_program(
             dag,
+            p_conditional=p_conditional,
             target_directory_path=seed_dir_path,
             program_name="program"
         )
@@ -120,12 +123,12 @@ def run_experiment(
         dag_path = os.path.join(dag_directory, "DAG.dot")
         program_path = os.path.join(dag_directory, "program.py")
         generate_and_execute_metamorphic_relations(program_path, dag_path)
-        mutated_dag_directory = os.path.join(dag_directory, "misspecified_dags/")
-        for mutated_dag_path in glob.iglob(os.path.join(mutated_dag_directory, "*.dot")):
-            try:
-                generate_and_execute_metamorphic_relations(program_path, mutated_dag_path)
-            except AssertionError as e:
-                print(e)
+        # mutated_dag_directory = os.path.join(dag_directory, "misspecified_dags/")
+        # for mutated_dag_path in glob.iglob(os.path.join(mutated_dag_directory, "*.dot")):
+        #     try:
+        #         generate_and_execute_metamorphic_relations(program_path, mutated_dag_path)
+        #     except AssertionError as e:
+        #         print(e)
 
 
 def generate_and_execute_metamorphic_relations(program_path, dag_path):
@@ -144,6 +147,7 @@ def generate_and_execute_metamorphic_relations(program_path, dag_path):
         print(f"Testing: {metamorphic_relation}")
         metamorphic_relation.generate_tests()
         metamorphic_relation.execute_tests(program.program)
+
 
 def write_params(
     path: str, n_dags: int, n_nodes: int, p_edge: float, experiment_name: str,
@@ -186,6 +190,13 @@ if __name__ == "__main__":
         help="Probability to include edge between any pair of nodes",
         type=float,
     )
+    parser.add_argument(
+        "-pc",
+        "--conditional",
+        help="Probability that an arbitrary non-terminal node is conditional",
+        type=float,
+        default=0.0
+    )
     parser.add_argument("-en", "--experiment", help="Path to store the experiment", type=str)
     parser.add_argument("-s", "--seed", help="Random seed", type=int)
     parser.add_argument("-t", "--task", help="Task to conduct: 'gen' for generation or 'run' for running experiments.")
@@ -193,12 +204,15 @@ if __name__ == "__main__":
     number_of_dags = 1
     number_of_nodes = 10
     probability_of_edge = 0.2
+    probability_of_conditional = 0.0
     experiment_directory_path = "./evaluation/experiment"
     seed = 0
     if args.dags:
         number_of_dags = args.dags
     if args.nodes:
         number_of_nodes = args.nodes
+    if args.conditional:
+        probability_of_conditional = args.conditional
     if args.edges:
         probability_of_edge = args.edges
     if args.experiment:
@@ -212,6 +226,7 @@ if __name__ == "__main__":
             number_of_dags,
             number_of_nodes,
             probability_of_edge,
+            p_conditional=probability_of_conditional,
             experiment_directory_path=experiment_directory_path,
             seed=seed
         )
