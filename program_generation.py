@@ -173,7 +173,6 @@ def write_statement_stack_to_python_file(
     :param target_directory_path: The directory to which the program will be saved.
     :param program_name: A name for the generated python file (excluding the .py extension).
     """
-    imports_str = "from math import log\n\n\n"
     input_args_str = "".join([f"\t{x}: int,\n" for x in sorted_input_nodes])
     input_args_str += "".join([f"\t{x}: int = None,\n" for x in sorted_output_nodes])
     method_definition_str = f"def {program_name}(\n{input_args_str}):\n"
@@ -187,7 +186,6 @@ def write_statement_stack_to_python_file(
     with safe_open_w(
             os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
-        program_file.write(imports_str)
         program_file.write(method_definition_str)
         program_file.write(doc_str)
         program_file.writelines(statement_stack)
