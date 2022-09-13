@@ -49,9 +49,8 @@ def generate_experiment(
         print(seed)
         # Create custom paths for experiment components
         seed_dir_path = os.path.join(experiment_directory_path, f"seed_{seed}")
-        dag_path = os.path.join(seed_dir_path, "DAG.dot")
-        mutation_config_path = os.path.join(seed_dir_path, "mutation_config.toml")
-        mutant_dags_dir_path = os.path.join(seed_dir_path, "misspecified_dags")
+        dag_dir_path = os.path.join(seed_dir_path, "dags")
+        dag_path = os.path.join(dag_dir_path, "original_dag", "DAG.dot")
 
         # Generate DAG and record nodes and edges
         dag = generate_dag(n_nodes, p_edge, seed=seed, dot_path=dag_path)
@@ -89,7 +88,7 @@ def generate_experiment(
         c_m_g_start_time = time()
         generate_causal_mutation_config(
             dag,
-            target_directory_path=mutation_config_path,
+            target_directory_path=dag_path.replace("DAG.dot", "mutation_config.toml"),
         )
         c_m_g_end_time = time()
         print(f"Causal mutation generation run time: "
@@ -98,10 +97,14 @@ def generate_experiment(
         # Create increasingly more misspecified DAGs
         m_ds_start_time = time()
         for p_invert in [0.25, 0.5, 0.75, 1]:
-            out_path = os.path.join(mutant_dags_dir_path, f"misspecified_dag_{p_invert*100}pct.dot")
+            out_path = os.path.join(dag_dir_path, f"misspecified_dag_{int(p_invert*100)}/DAG.dot")
             mutant_dag = mutate_dag(dag, p_invert, out_path, seed)
             shd = structural_hamming_distance(dag, mutant_dag)
             print(shd)
+            generate_causal_mutation_config(
+                mutant_dag,
+                target_directory_path=out_path.replace("DAG.dot", "mutation_config.toml"),
+            )
         m_ds_end_time = time()
         print(f"Mutate DAGs run time: {m_ds_end_time - m_ds_start_time}")
 
@@ -120,7 +123,7 @@ def run_experiment(
     """
     for dag_directory in glob.iglob(os.path.join(experiment_directory_path, "**/")):
         print(f"Experiment path: {dag_directory}")
-        dag_path = os.path.join(dag_directory, "DAG.dot")
+        dag_path = os.path.join(dag_directory, "dags", "original_dag", "DAG.dot")
         program_path = os.path.join(dag_directory, "program.py")
         generate_and_execute_metamorphic_relations(program_path, dag_path)
         # mutated_dag_directory = os.path.join(dag_directory, "misspecified_dags/")
