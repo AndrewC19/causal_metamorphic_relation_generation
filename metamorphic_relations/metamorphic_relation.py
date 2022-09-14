@@ -43,7 +43,8 @@ class ShouldCause(CausalMetamorphicRelation):
         X = self.input_var
         X_prime = f"{self.input_var}_prime"
 
-        inputs = list(set([v for v in self.dag.nodes if len(set(self.dag.predecessors(v))) == 0 and v != X] +
+        inputs = list(set([v for v in self.dag.nodes if
+                           len(set(self.dag.predecessors(v))) == 0 and v != X] +
             self.adjustment_list))
         assert X not in inputs, f"{X} should NOT be in {inputs}"
         columns = inputs + [X] + [X_prime]
@@ -105,6 +106,8 @@ class ShouldNotCause(CausalMetamorphicRelation):
     def generate_tests(self, sample_size=1, seed=0):
         np.random.seed(seed)
         X = self.input_var
+        X_prime = f"{self.input_var}_prime"
+
         inputs = list(set([v for v in self.dag.nodes if
                            len(list(self.dag.predecessors(v))) == 0 and v not in (self.adjustment_list + [X])] + [X]))
         inputs_prime = [f"{x}_prime" for x in inputs]
