@@ -4,6 +4,7 @@ from networkx.drawing.nx_pydot import to_pydot
 from itertools import combinations
 from helpers import safe_open_w
 from typing import List
+import json
 
 
 def get_non_causal_node_pairs(dag: nx.DiGraph):
@@ -84,14 +85,17 @@ def structural_hamming_distance(
     return len(exclusive_true_edges) + len(exclusive_other_edges)
 
 
-def to_dot(dag: nx.DiGraph, out_path: str):
+def to_dot(dag: nx.DiGraph, out_path: str, **kwargs):
     """Save DAG as a DOT file at the specified out path.
 
     :param dag: DAG to save as DOT.
     :param out_path: Path to which the DOT file will be saved.
+    *kwargs: Additional keyword arguments
     """
     with safe_open_w(out_path) as dag_file:
-        dot_dag = to_pydot(dag).to_string()
+        dot_dag = to_pydot(dag)
+        dot_dag.set_comment(json.dumps(kwargs))
+        dot_dag = dot_dag.to_string()
         dot_dag = dot_dag[:-3] + "}"  # Fixes networkx bug that adds newline to nodes
         dag_file.write(dot_dag)
 

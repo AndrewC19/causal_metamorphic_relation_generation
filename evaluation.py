@@ -12,7 +12,6 @@ from programs.program_generation import generate_program
 from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 from mutation_testing.mutation_config_generation import generate_causal_mutation_config
 from helpers import safe_open_w
-from dags.dag_utils import structural_hamming_distance
 
 
 def generate_experiment(
@@ -53,13 +52,13 @@ def generate_experiment(
         dag_path = os.path.join(dag_dir_path, "original_dag", "DAG.dot")
 
         # Generate DAG and record nodes and edges
-        dag = generate_dag(n_nodes, p_edge, seed=seed, dot_path=dag_path)
+        dag = generate_dag(n_nodes, p_edge, p_conditional, seed=seed, dot_path=dag_path)
         total_nodes += len(dag.nodes)
         total_edges += len(dag.edges)
 
         p_g_start_time = time()
         generate_program(
-            dag,
+            dag.copy(),
             p_conditional=p_conditional,
             target_directory_path=seed_dir_path,
             program_name="program"
@@ -81,8 +80,6 @@ def generate_experiment(
         for p_invert in [0.25, 0.5, 0.75, 1]:
             out_path = os.path.join(dag_dir_path, f"misspecified_dag_{int(p_invert*100)}/DAG.dot")
             mutant_dag = mutate_dag(dag, p_invert, out_path, seed)
-            shd = structural_hamming_distance(dag, mutant_dag)
-            print(shd)
             generate_causal_mutation_config(
                 dag,
                 target_directory_path=out_path.replace("DAG.dot", "mutation_config.toml"),
