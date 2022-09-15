@@ -125,7 +125,7 @@ class ShouldNotCause(CausalMetamorphicRelation):
             f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
 
     def __str__(self):
-        metamorphic_relation_string = f"{self.input_var} ⫫ {self.output_var}"
+        metamorphic_relation_string = f"{self.input_var} _||_ {self.output_var}"
         if self.adjustment_list:
             metamorphic_relation_string += f" | {self.adjustment_list}"
         return metamorphic_relation_string
