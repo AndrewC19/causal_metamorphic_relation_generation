@@ -25,40 +25,48 @@ class CausalMetamorphicRelation(ABC):
         self.output_var = output_var
         self.adjustment_list = adjustment_list
         self.dag = dag
+        self.tests = None
 
     def generate_tests(self, sample_size=1, seed=0):
         np.random.seed(seed)
-        X = self.input_var
-        X_prime = f"{self.input_var}_prime"
+        source_input = self.input_var
+        follow_up_input = f"{self.input_var}_prime"
 
-        inputs = list(set([v for v in self.dag.nodes if len(set(self.dag.predecessors(v))) == 0 and v != X] +
-                          self.adjustment_list))
-        assert X not in inputs, f"{X} should NOT be in {inputs}"
-        columns = inputs + [X] + [X_prime]
-        assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
-        assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
+        # Get all input values apart from the source_input and the adjustment list
+        test_inputs = set()
+        for node in self.dag.nodes:
+            if ("X" in node) and (node != source_input):
+                test_inputs.add(node)
+        test_inputs = list(test_inputs | set(self.adjustment_list))
 
+        assert source_input not in test_inputs, f"{source_input} should NOT be in {test_inputs}"
+        assert len(test_inputs) == len(set(test_inputs)), f"Input names not unique {test_inputs} {count(test_inputs)}"
+
+        # Assign random values to inputs between -10 and 10
         input_samples = pd.DataFrame(
-            np.random.randint(-10, 10, size=(sample_size, len(inputs))),
-            columns=sorted(inputs)
+            np.random.randint(-10, 10, size=(sample_size, len(test_inputs))),
+            columns=sorted(test_inputs)
         )
-        # Sample without replacement from the possible interventions
+
+        # Sample without replacement from the possible interventions (source and follow-up input pairs)
         candidate_interventions = np.array(list(combinations(range(-10, 11), 2)))
         random_intervention_indices = np.random.choice(candidate_interventions.shape[0], sample_size, replace=False)
         intervention_samples = pd.DataFrame(
             candidate_interventions[random_intervention_indices],
-            columns=sorted([X] + [X_prime])
+            columns=sorted([source_input] + [follow_up_input])
         )
-        X_values = intervention_samples[[X]]
-        X_prime_values = intervention_samples[[X_prime]]
+        source_input_values = intervention_samples[[source_input]]
+        follow_up_input_values = intervention_samples[[follow_up_input]]
+
+        # Generate test tuples comprising source and follow-up inputs (interventions)
         self.tests = list(
             zip(
-                X_values.to_dict(orient="records"),
+                source_input_values.to_dict(orient="records"),
                 [{k.replace("_prime", ""): v for k, v in values.items()} for values in
-                 X_prime_values.to_dict(orient="records")],
-                input_samples.to_dict(orient="records") if not input_samples.empty else [{}] * len(X_values),
-                [self.output_var] * len(X_values),
-                [self] * len(X_values)
+                 follow_up_input_values.to_dict(orient="records")],
+                input_samples.to_dict(orient="records") if not input_samples.empty else [{}] * len(source_input_values),
+                [self.output_var] * len(source_input_values),
+                [self] * len(source_input_values)
             )
         )
 
