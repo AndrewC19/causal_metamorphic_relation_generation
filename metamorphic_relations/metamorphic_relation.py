@@ -119,7 +119,7 @@ class ShouldNotCause(CausalMetamorphicRelation):
     """A causal metamorphic relation asserting that changes to the input x should not cause y to change when fixing the
     value of variables in the adjustment list.
     """
-
+    
     def assertion(self, source_output, follow_up_output, run):
         assert source_output == follow_up_output,\
             f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"

@@ -10,7 +10,7 @@ from dags.dag_utils import (
 
 
 def generate_dag(
-    n_nodes: int, p_edge: float, seed: int = None, dot_path: str = None
+    n_nodes: int, p_edge: float, p_conditional: float, seed: int = None, dot_path: str = None
 ) -> nx.DiGraph:
     """Generate a random DAG with a specified number of nodes and edges.
 
@@ -35,6 +35,7 @@ def generate_dag(
 
     :param n_nodes: The number of nodes the DAG should contain.
     :param p_edge: The probability of edge creation.
+    :param p_conditional: Probability of a node being made conditional.
     :param seed: An optional random seed.
     :param dot_path: An optional path to save a DOT file.
     return: A string containing a DOT causal DAG.
@@ -69,7 +70,7 @@ def generate_dag(
     input_output_causal_dag = nx.relabel_nodes(causal_dag, node_map)
 
     if dot_path:
-        to_dot(input_output_causal_dag, dot_path)
+        to_dot(input_output_causal_dag, dot_path, p_edge=p_edge, p_conditional=p_conditional)
 
     return input_output_causal_dag
 
@@ -106,7 +107,8 @@ def mutate_dag(
     assert nx.is_directed_acyclic_graph(dag_to_mutate)
 
     if out_path:
-        to_dot(dag_to_mutate, out_path)
+        shd = structural_hamming_distance(causal_dag, dag_to_mutate)
+        to_dot(dag_to_mutate, out_path, p_invert_edge=p_invert_edge, structural_hamming_distance=shd)
 
     return dag_to_mutate
 
@@ -116,4 +118,3 @@ if __name__ == "__main__":
     mutated_dag = mutate_dag(dag, 0.5)
     shd = structural_hamming_distance(dag, mutated_dag)
     zero_shd = structural_hamming_distance(mutated_dag, mutated_dag)
-
