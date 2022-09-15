@@ -1,11 +1,11 @@
 """Causal metamorphic relation classes."""
 from abc import ABC, abstractmethod
 from typing import List
-import networkx as nx
-from importlib import import_module
 from itertools import combinations
+import networkx as nx
 import pandas as pd
 import numpy as np
+import sys
 
 
 def count(lst):
@@ -70,8 +70,29 @@ class CausalMetamorphicRelation(ABC):
             )
         )
 
-    @abstractmethod
     def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
+        failures = []
+        for run in self.tests:
+            source_input, follow_up_input, other_inputs, output, independence = run
+            control = program(**(other_inputs | source_input))[output]
+            treatment = program(**(other_inputs | follow_up_input))[output]
+            try:
+                self.assertion(control, treatment, run)
+            except AssertionError as e:
+                print(e)
+                if not continue_after_failure:
+                    sys.exit(1)
+                else:
+                    failures.append({
+                        "source_inputs": (other_inputs | source_input),
+                        "source_outcome": control,
+                        "follow_up_inputs": (other_inputs | follow_up_input),
+                        "follow_up_outcome": treatment
+                    })
+        return failures
+
+    @abstractmethod
+    def assertion(self, source_output, follow_up_output, run):
         ...
 
 
@@ -80,24 +101,9 @@ class ShouldCause(CausalMetamorphicRelation):
     value of variables in the adjustment list.
     """
 
-    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
-        failures = []
-        for run in self.tests:
-            x_value, x_prime_value, other_inputs, y, independence = run
-            control = program(**(other_inputs | x_value))[y]
-            treatment = program(**(other_inputs | x_prime_value))[y]
-            ok = control != treatment
-            if not continue_after_failure:
-                assert ok, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
-            if not ok:
-                failures.append({
-                    "control_inputs": (other_inputs | x_value),
-                    "control_outcome": control,
-                    "treatment_inputs": (other_inputs | x_prime_value),
-                    "treatment_outcome": treatment
-                })
-
-        return failures
+    def assertion(self, source_output, follow_up_output, run):
+        assert source_output != follow_up_output,\
+            f"Expected source output {source_output} NOT to equal follow-up output {follow_up_output} for\n{run}"
 
     def __str__(self):
         metamorphic_relation_str = f"{self.input_var} --> {self.output_var}"
@@ -114,23 +120,9 @@ class ShouldNotCause(CausalMetamorphicRelation):
     value of variables in the adjustment list.
     """
 
-    def execute_tests(self, program, continue_after_failure=False) -> List[str]:
-        failures = []
-        for run in self.tests:
-            x_value, x_prime_value, other_inputs, y, independence = run
-            control = program(**(other_inputs | x_value))[y]
-            treatment = program(**(other_inputs | x_prime_value))[y]
-            ok = control == treatment
-            if not continue_after_failure:
-                assert ok, f"Expected control {control} to equal treatment {treatment} for\n{run}"
-            if not ok:
-                failures.append({
-                    "control_inputs": (other_inputs | x_value),
-                    "control_outcome": control,
-                    "treatment_inputs": (other_inputs | x_prime_value),
-                    "treatment_outcome": treatment
-                })
-            return failures
+    def assertion(self, source_output, follow_up_output, run):
+        assert source_output == follow_up_output,\
+            f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
 
     def __str__(self):
         metamorphic_relation_string = f"{self.input_var} ⫫ {self.output_var}"

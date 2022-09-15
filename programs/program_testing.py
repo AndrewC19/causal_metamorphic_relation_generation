@@ -63,8 +63,18 @@ for relation in generate_metamorphic_relations(dag):
     result["failures"] += relation.execute_tests(program.program, continue_after_failure=args.continue_)
     results.append(result)
 
+
+def get_failures(results_dict):
+    failures = {"relation": [], "result": []}
+    for result in results_dict:
+        if len(result["failures"]) > 0:
+            failures["relation"].append(result["relation"])
+            failures["result"].append(result["failures"])
+    return failures
+
+
 if args.outfile is not None:
     with open(args.outfile, 'w') as f:
         print(json.dumps(results, indent=2), file=f)
 if args.continue_:
-    assert all([len(result['failures']) == 0 for result in results])
+    assert all([len(result['failures']) == 0 for result in results]), f"Test Failures: {get_failures(results)}"

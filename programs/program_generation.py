@@ -91,9 +91,6 @@ def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
 
         # Construct a linear equation for each node based on its causes
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
-        # coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
-        # expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
-        # expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
 
         # Add if not none before each output statement for controllability
         statement = f"\tif {output_node} is None:\n"
@@ -108,21 +105,6 @@ def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
             statement += if_body_statement
             statement += f"\t\telse:\n"
             statement += else_body_statement
-            # statement += generate_predicate(conditional_parents)
-            #
-            # # predicate = " + ".join([f"{x}" for x in conditional_parents]) + " >= 0"
-            #
-            # # In the true branch (if), place the full linear equation
-            # # statement += f"\t\tif {predicate}:\n"
-            # if_body_statement, else_body_statement = generate_if_else_body(output_node, causes, conditional_parents)
-            # statement += f"\t\t\t{output_node} = {expr}\n"
-            #
-            # # In the false branch (else), place the linear equation without the non-conditional parents
-            # else_expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, conditional_parents)])
-            # else_expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
-            # statement += f"\t\telse:\n"
-            # statement += f"\t\t\t{output_node} = {else_expr}\n"
-
         else:
             # No conditional parents so no if-then-else
             statement += generate_linear_statement(output_node, causes)
@@ -231,7 +213,7 @@ def write_statement_stack_to_python_file(
     return_str = (
             "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
-    statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
+    statement_stack.reverse()  # Reverse the statement stack to be in order of execution (later outputs last)
     with safe_open_w(
             os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
