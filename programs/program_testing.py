@@ -75,6 +75,6 @@ def get_failures(results_dict):
 
 if args.outfile is not None:
     with open(args.outfile, 'w') as f:
-        print(json.dumps(results, indent=2), file=f)
+        print(json.dumps(results), file=f)
 if args.continue_:
     assert all([len(result['failures']) == 0 for result in results]), f"Test Failures: {get_failures(results)}"
