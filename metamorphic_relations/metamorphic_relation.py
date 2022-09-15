@@ -1,10 +1,11 @@
 """Causal metamorphic relation classes."""
 from abc import ABC, abstractmethod
 from typing import List
+from itertools import combinations
 import networkx as nx
-from importlib import import_module
 import pandas as pd
 import numpy as np
+import sys
 
 
 def count(lst):
@@ -24,12 +25,74 @@ class CausalMetamorphicRelation(ABC):
         self.output_var = output_var
         self.adjustment_list = adjustment_list
         self.dag = dag
+        self.tests = None
 
     def generate_tests(self, sample_size=1, seed=0):
-        ...
+        np.random.seed(seed)
+        source_input = self.input_var
+        follow_up_input = f"{self.input_var}_prime"
+
+        # Get all input values apart from the source_input and the adjustment list
+        test_inputs = set()
+        for node in self.dag.nodes:
+            if ("X" in node) and (node != source_input):
+                test_inputs.add(node)
+        test_inputs = list(test_inputs | set(self.adjustment_list))
+
+        assert source_input not in test_inputs, f"{source_input} should NOT be in {test_inputs}"
+        assert len(test_inputs) == len(set(test_inputs)), f"Input names not unique {test_inputs} {count(test_inputs)}"
+
+        # Assign random values to inputs between -10 and 10
+        input_samples = pd.DataFrame(
+            np.random.randint(-10, 10, size=(sample_size, len(test_inputs))),
+            columns=sorted(test_inputs)
+        )
+
+        # Sample without replacement from the possible interventions (source and follow-up input pairs)
+        candidate_interventions = np.array(list(combinations(range(-10, 11), 2)))
+        random_intervention_indices = np.random.choice(candidate_interventions.shape[0], sample_size, replace=False)
+        intervention_samples = pd.DataFrame(
+            candidate_interventions[random_intervention_indices],
+            columns=sorted([source_input] + [follow_up_input])
+        )
+        source_input_values = intervention_samples[[source_input]]
+        follow_up_input_values = intervention_samples[[follow_up_input]]
+
+        # Generate test tuples comprising source and follow-up inputs (interventions)
+        self.tests = list(
+            zip(
+                source_input_values.to_dict(orient="records"),
+                [{k.replace("_prime", ""): v for k, v in values.items()} for values in
+                 follow_up_input_values.to_dict(orient="records")],
+                input_samples.to_dict(orient="records") if not input_samples.empty else [{}] * len(source_input_values),
+                [self.output_var] * len(source_input_values),
+                [self] * len(source_input_values)
+            )
+        )
+
+    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
+        failures = []
+        for run in self.tests:
+            source_input, follow_up_input, other_inputs, output, independence = run
+            control = program(**(other_inputs | source_input))[output]
+            treatment = program(**(other_inputs | follow_up_input))[output]
+            try:
+                self.assertion(control, treatment, run)
+            except AssertionError as e:
+                print(e)
+                if not continue_after_failure:
+                    sys.exit(1)
+                else:
+                    failures.append({
+                        "source_inputs": (other_inputs | source_input),
+                        "source_outcome": control,
+                        "follow_up_inputs": (other_inputs | follow_up_input),
+                        "follow_up_outcome": treatment
+                    })
+        return failures
 
     @abstractmethod
-    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
+    def assertion(self, source_output, follow_up_output, run):
         ...
 
 
@@ -38,55 +101,9 @@ class ShouldCause(CausalMetamorphicRelation):
     value of variables in the adjustment list.
     """
 
-    def generate_tests(self, sample_size=1, seed=0):
-        np.random.seed(seed)
-        X = self.input_var
-        X_prime = f"{self.input_var}_prime"
-
-        inputs = list(set([v for v in self.dag.nodes if
-                           len(set(self.dag.predecessors(v))) == 0 and v != X] +
-            self.adjustment_list))
-        assert X not in inputs, f"{X} should NOT be in {inputs}"
-        columns = inputs + [X] + [X_prime]
-        assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
-        assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
-        samples = pd.DataFrame(
-            np.random.randint(-10, 10, size=(1, len(columns))),
-            columns=sorted(columns),
-        )
-        samples[X_prime] = samples[X_prime] * 10
-        X_values = samples[[X]]
-        X_prime_values = samples[[X_prime]]
-        other_inputs = samples[inputs]
-        self.tests = list(
-            zip(
-                X_values.to_dict(orient="records"),
-                [{k.replace("_prime", ""): v for k, v in values.items()} for values in
-                 X_prime_values.to_dict(orient="records")],
-                other_inputs.to_dict(orient="records") if not other_inputs.empty else [{}] * len(X_values),
-                [self.output_var] * len(X_values),
-                [self] * len(X_values)
-            )
-        )
-
-
-    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
-        failures = []
-        for run in self.tests:
-            x_value, x_prime_value, other_inputs, y, independence = run
-            control = program(**(other_inputs | x_value))[y]
-            treatment = program(**(other_inputs | x_prime_value))[y]
-            ok = control != treatment
-            if not continue_after_failure:
-                assert ok, f"Expected control {control} NOT to equal treatment {treatment} for\n{run}"
-            if not ok:
-                failures.append({
-                    "control_inputs": (other_inputs | x_value),
-                    "control_outcome": control,
-                    "treatment_inputs": (other_inputs | x_prime_value),
-                    "treatment_outcome": treatment
-                })
-        return failures
+    def assertion(self, source_output, follow_up_output, run):
+        assert source_output != follow_up_output,\
+            f"Expected source output {source_output} NOT to equal follow-up output {follow_up_output} for\n{run}"
 
     def __str__(self):
         metamorphic_relation_str = f"{self.input_var} --> {self.output_var}"
@@ -102,59 +119,10 @@ class ShouldNotCause(CausalMetamorphicRelation):
     """A causal metamorphic relation asserting that changes to the input x should not cause y to change when fixing the
     value of variables in the adjustment list.
     """
-
-    def generate_tests(self, sample_size=1, seed=0):
-        np.random.seed(seed)
-        X = self.input_var
-        X_prime = f"{self.input_var}_prime"
-
-        inputs = list(set([v for v in self.dag.nodes if
-                           len(list(self.dag.predecessors(v))) == 0 and v not in (self.adjustment_list + [X])] + [X]))
-        inputs_prime = [f"{x}_prime" for x in inputs]
-        columns = inputs + [x for x in self.adjustment_list if x != X] + inputs_prime
-        assert len(set(inputs).intersection(inputs_prime)) == 0,\
-               f"{set(inputs).intersection(inputs_prime)} should be empty"
-        assert len(inputs) == len(set(inputs)), f"Input names not unique {inputs} {count(inputs)}"
-        assert len(inputs_prime) == len(
-            set(inputs_prime)), f"Input prime names not unique {inputs_prime} {count(inputs_prime)}"
-        assert len(columns) == len(set(columns)), f"Column names not unique {columns} {count(columns)}"
-        samples = pd.DataFrame(
-            np.random.randint(-10, 10, size=(1, len(columns))),
-            columns=sorted(columns),
-        )
-        X_values = samples[inputs]
-        X_prime_values = samples[inputs_prime]
-        Z_values = samples[self.adjustment_list]
-        # assert False
-        # assert len(x_values) == len(x_prime_values) == len(Z_values)
-        self.tests = list(
-            zip(
-                X_values.to_dict(orient="records"),
-                [{k.replace("_prime", ""): v for k, v in values.items()} for values in
-                 X_prime_values.to_dict(orient="records")],
-                Z_values.to_dict(orient="records") if not Z_values.empty else [{}] * len(X_values),
-                [self.output_var] * len(X_values),
-                [self] * len(X_values)
-            )
-        )
-
-    def execute_tests(self, program, continue_after_failure=False) -> List[str]:
-        failures = []
-        for run in self.tests:
-            x_value, x_prime_value, other_inputs, y, independence = run
-            control = program(**(other_inputs | x_value))[y]
-            treatment = program(**(other_inputs | x_prime_value))[y]
-            ok = control == treatment
-            if not continue_after_failure:
-                assert ok, f"Expected control {control} to equal treatment {treatment} for\n{run}"
-            if not ok:
-                failures.append({
-                    "control_inputs": (other_inputs | x_value),
-                    "control_outcome": control,
-                    "treatment_inputs": (other_inputs | x_prime_value),
-                    "treatment_outcome": treatment
-                })
-            return failures
+    
+    def assertion(self, source_output, follow_up_output, run):
+        assert source_output == follow_up_output,\
+            f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
 
     def __str__(self):
         metamorphic_relation_string = f"{self.input_var} ⫫ {self.output_var}"
@@ -164,26 +132,3 @@ class ShouldNotCause(CausalMetamorphicRelation):
 
     def __repr__(self):
         return self.__str__()
-
-
-if __name__ == "__main__":
-    program = import_module("evaluation.single_experiment.seed_17612.program").program
-    dag = nx.DiGraph(nx.nx_pydot.read_dot("../evaluation/single_experiment/seed_17612/DAG.dot"))
-    print(dag)
-    should_cause = ShouldCause(
-        input_var="X1",
-        output_var="Y1",
-        adjustment_list=[],
-        dag=dag
-    )
-    should_cause.generate_tests()
-    should_cause.execute_tests(program)
-
-    should_not_cause = ShouldNotCause(
-        input_var="X3",
-        output_var="Y1",
-        adjustment_list=["X1"],
-        dag=dag
-    )
-    should_not_cause.generate_tests()
-    should_not_cause.execute_tests(program)

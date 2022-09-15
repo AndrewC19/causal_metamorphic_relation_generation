@@ -88,11 +88,9 @@ def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
     statement_stack = []
 
     for output_node in nodes_ordered_for_traversal:
+
         # Construct a linear equation for each node based on its causes
         causes = [cause for (cause, effect) in causal_dag.in_edges(output_node)]
-        coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
-        expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
-        expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
 
         # Add if not none before each output statement for controllability
         statement = f"\tif {output_node} is None:\n"
@@ -101,24 +99,92 @@ def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
         # Add conditional behaviour for conditional nodes
         if conditional_parents:
             # Place the linear equation within an if statement whose predicate is a function of all conditional causes
-            predicate = " + ".join([f"{x}" for x in conditional_parents]) + " >= 0"
-
-            # In the true branch (if), place the full linear equation
-            statement += f"\t\tif {predicate}:\n"
-            statement += f"\t\t\t{output_node} = {expr}\n"
-
-            # In the false branch (else), place the linear equation without the non-conditional parents
-            else_expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, conditional_parents)])
-            else_expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
+            predicate = generate_predicate(conditional_parents)
+            if_body_statement, else_body_statement = generate_if_else_body(output_node, causes, conditional_parents)
+            statement += predicate
+            statement += if_body_statement
             statement += f"\t\telse:\n"
-            statement += f"\t\t\t{output_node} = {else_expr}\n"
-
+            statement += else_body_statement
         else:
             # No conditional parents so no if-then-else
-            statement += f"\t\t{output_node} = {expr}\n"
+            statement += generate_linear_statement(output_node, causes)
         statement_stack.append(statement)
 
     return statement_stack
+
+
+def generate_linear_statement(effect, causes):
+    """Generate a random linear statement of the effect node that includes all of the causes.
+
+    Example: Y = (2 * X1) + (3 * X2) + (-4 * X3) + 4 for effect=Y and causes=[X1, X2, X3].
+
+    :param effect: Node to appear on LHS of statement.
+    :param causes: Nodes to appear on RHS of statement.
+    :return statement: A string representing a linear statement in Python.
+    """
+    coefficients = [random.choice([random.randint(1, 10), random.randint(-10, -1)]) for _ in causes]
+    expr = " + ".join([f"({c} * {x})" for c, x in zip(coefficients, causes)])
+    expr += f" + {random.choice([random.randint(0, 10), random.randint(-10, 0)])}"
+    statement = f"\t\t{effect} = {expr}\n"
+    return statement
+
+
+def generate_predicate(conditional_causes):
+    """Generate a predicate from a list of conditional causes.
+
+    The predicate is an inequality that checks whether the sum of conditional causes is either greater than or equal to
+    or less than or equal to some value in the range [-10, 10].
+
+    Example: if (X1 + X2 + X3 >= 4): for conditional_causes = [X1, X2, X3].
+
+    :param conditional_causes: A list of variables that are to be used in the predicate.
+    :return predicate: A predicate that is a function of all given conditional causes.
+    """
+    inequality_symbol = random.choice([" <= ", " >= "])
+    inequality_value = random.randint(-10, 10)
+    inequality = " + ".join([f"{x}" for x in conditional_causes]) + inequality_symbol + str(inequality_value)
+    predicate = f"\t\tif {inequality}:\n"
+    return predicate
+
+
+def generate_if_else_body(effect, causes, conditional_causes):
+    """Generate a pair of statements for the if and else body corresponding to a particular cause-effect relationship.
+
+    This method generates a statement for the true branch of the if statement that includes a random (potentially empty)
+    subset of the effect node's causes.
+
+    To guarantee the causal structure of the program contains all causes of the effect, this method then generates an
+    else statement that includes all causes of the effect node that did not appear in the true branch of the i
+    statement. In addition to these necessary nodes, the statement in the else body also includes a random (potentially
+    empty) subset of the effect node's causes.
+
+    :param effect: The variable that appears on the LHS of the statement.
+    :param causes: The variables that appear on the RHS of the statement.
+    :param conditional_causes: The parents of the effect variable that are conditional (i.e. appear in the predicate of
+                               the if statement).
+    :return if_body_statement, else_body_statement: The statement for the true and false branches of the if statement,
+                                                    respectively.
+    """
+    # Sample a potentially empty set of causes to include in the if body's statement
+    if_body_nodes = random.sample(causes, random.randint(0, len(causes)))
+    if_body_statement = "\t" + generate_linear_statement(effect, if_body_nodes)
+
+    # The else body statement must include at least all causes that do not appear in the if statement
+    necessary_else_body_nodes = set(causes) - set(if_body_nodes) - set(conditional_causes)
+
+    # The else body statement's nodes can also overlap with the if body statement's nodes
+    nodes_not_in_else_body = set(causes) - necessary_else_body_nodes
+    additional_else_body_nodes = random.sample(nodes_not_in_else_body, random.randint(0, len(nodes_not_in_else_body)))
+    else_body_nodes = list(necessary_else_body_nodes) + additional_else_body_nodes
+
+    # Confirm that all causes are used in either the if statement, else statement, or predicate
+    assert set(else_body_nodes + if_body_nodes + conditional_causes) == set(causes),\
+        f"Error, the following causes are missing: "\
+        f"{set(causes) - set(else_body_nodes + if_body_nodes + conditional_causes)}"
+
+    else_body_statement = "\t" + generate_linear_statement(effect, else_body_nodes)
+
+    return if_body_statement, else_body_statement
 
 
 def write_statement_stack_to_python_file(
@@ -147,7 +213,7 @@ def write_statement_stack_to_python_file(
     return_str = (
             "\treturn {" + "".join([f"'{y}': {y}, " for y in sorted_output_nodes])[:-2] + "}\n"
     )
-    statement_stack.reverse()  # Reverse the stack of syntax trees to be in order of execution (later outputs last)
+    statement_stack.reverse()  # Reverse the statement stack to be in order of execution (later outputs last)
     with safe_open_w(
             os.path.join(target_directory_path, f"{program_name}.py")
     ) as program_file:
