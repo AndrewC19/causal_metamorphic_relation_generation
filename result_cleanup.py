@@ -40,4 +40,4 @@ for job in os.listdir(args.results):
         results[job_id] = result
     os.remove(os.path.join(args.results, job))
 with open(os.path.join(args.results, args.outfile), 'w') as f:
-    print(json.dumps(results, indent=2), file=f)
+    print(json.dumps(results), file=f)

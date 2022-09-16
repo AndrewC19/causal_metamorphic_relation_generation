@@ -85,7 +85,7 @@ for dag in dags:
 
     datum["jobs"] = {job: {} for job in results}
     baseline_failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results["baseline"]["test_outcomes"] for test in relation["failures"]]
-    baseline_failed_relations = {result['relation']: not relation_passed(result) for result in results["baseline"]["test_outcomes"]}
+    baseline_failed_relations = [result['relation'] for result in results["baseline"]["test_outcomes"] if not relation_passed(result)]
     datum["jobs"]["baseline"]["positive_tests"] = len(baseline_failed_tests)
     datum["jobs"]["baseline"]["positive_relations"] = len(baseline_failed_relations)
 
@@ -126,6 +126,13 @@ for dag in dags:
         total_relations = len(results[job]["test_outcomes"])
         datum["jobs"][job]["true_negative_tests"] = total_tests - len(set(baseline_failed_tests).union(failed_tests))
         datum["jobs"][job]["true_negative_relations"] = total_relations - len(set(baseline_failed_relations).union(failed_relations))
+        print(job)
+        print(total_relations, "total_relations")
+        print(sorted(baseline_failed_relations), len(baseline_failed_relations), "baseline_failed_relations")
+        print(sorted(failed_relations), len(failed_relations), "failed_relations")
+        print(sorted(list(set(baseline_failed_relations).union(failed_relations))), len(list(set(baseline_failed_relations).union(set(failed_relations)))), "union")
+        assert len(set(baseline_failed_relations).union(failed_relations)) <= total_relations
+
 
         # Failed baseline - Passed mutant
         # False Negatives - i.e. mutant obfuscators
@@ -134,4 +141,4 @@ for dag in dags:
     data.append(datum)
 
 with open(os.path.join(args.seed, "results.json"), 'w') as f:
-    print(json.dumps(data, indent=2), file=f)
+    print(json.dumps(data), file=f)

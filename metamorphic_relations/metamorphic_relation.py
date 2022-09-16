@@ -5,7 +5,6 @@ from itertools import combinations
 import networkx as nx
 import pandas as pd
 import numpy as np
-import sys
 
 
 def count(lst):
@@ -23,7 +22,7 @@ class CausalMetamorphicRelation(ABC):
     def __init__(self, input_var: str, output_var: str, adjustment_list: List[str], dag: nx.DiGraph):
         self.input_var = input_var
         self.output_var = output_var
-        self.adjustment_list = adjustment_list
+        self.adjustment_list = sorted(adjustment_list)
         self.dag = dag
         self.tests = None
 
@@ -84,20 +83,6 @@ class CausalMetamorphicRelation(ABC):
                     "follow_up_outcome": treatment
                 })
 
-            # try:
-            #     self.assertion(control, treatment, run)
-            # except AssertionError as e:
-            #     print(e)
-            #     if not continue_after_failure:
-            #         sys.exit(1)
-            #     else:
-            #         failures.append({
-            #             "source_inputs": (other_inputs | source_input),
-            #             "source_outcome": control,
-            #             "follow_up_inputs": (other_inputs | follow_up_input),
-            #             "follow_up_outcome": treatment
-            #         })
-
         return failures
 
     @abstractmethod
@@ -118,8 +103,6 @@ class ShouldCause(CausalMetamorphicRelation):
 
     def assertion(self, source_output, follow_up_output, run):
         return source_output != follow_up_output
-        # assert source_output != follow_up_output,\
-        #     f"Expected source output {source_output} NOT to equal follow-up output {follow_up_output} for\n{run}"
 
     def oracle(self, test_failures):
         assert len(test_failures) < len(self.tests), f"{str(self)}: {len(test_failures)}/{len(self.tests)} tests failed."
@@ -138,11 +121,9 @@ class ShouldNotCause(CausalMetamorphicRelation):
     """A causal metamorphic relation asserting that changes to the input x should not cause y to change when fixing the
     value of variables in the adjustment list.
     """
-    
+
     def assertion(self, source_output, follow_up_output, run):
         return source_output == follow_up_output
-        # assert source_output == follow_up_output,\
-        #     f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
 
     def oracle(self, test_failures):
         assert len(test_failures) == 0, f"{str(self)} failed: {len(test_failures)} tests failed."

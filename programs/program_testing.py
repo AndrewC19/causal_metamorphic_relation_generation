@@ -1,10 +1,8 @@
 import argparse
-import sys
-
 import networkx as nx
 import importlib
-from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 import json
+from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 
 
 parser = argparse.ArgumentParser(
@@ -81,8 +79,7 @@ def get_failures(results_dict):
 
 if args.outfile is not None:
     with open(args.outfile, 'w') as f:
-        print(json.dumps(results, indent=2), file=f)
+        print(json.dumps(results), file=f)
 
-# Check if no MRs have failed
 if args.continue_:
     assert all([len(result['failures']) == 0 for result in results]), f"Test Failures: {get_failures(results)}"
