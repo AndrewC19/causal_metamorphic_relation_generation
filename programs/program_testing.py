@@ -60,7 +60,13 @@ for relation in generate_metamorphic_relations(dag):
     result = {"relation": str(relation), "total": 0, "failures": []}
     relation.generate_tests(seed=seed, sample_size=sample_size)
     result["total"] += len(relation.tests)
-    result["failures"] += relation.execute_tests(program.program, continue_after_failure=args.continue_)
+    failures = relation.execute_tests(program.program)
+    try:
+        relation.oracle(failures)
+    except AssertionError as e:
+        print(e)
+        # Only add failures that result in MR failing (i.e. if all tests fail for --> and if one test fails for _||_)
+        result["failures"] += failures
     results.append(result)
 
 
@@ -76,5 +82,7 @@ def get_failures(results_dict):
 if args.outfile is not None:
     with open(args.outfile, 'w') as f:
         print(json.dumps(results, indent=2), file=f)
+
+# Check if no MRs have failed
 if args.continue_:
     assert all([len(result['failures']) == 0 for result in results]), f"Test Failures: {get_failures(results)}"

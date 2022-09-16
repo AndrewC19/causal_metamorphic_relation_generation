@@ -70,29 +70,44 @@ class CausalMetamorphicRelation(ABC):
             )
         )
 
-    def execute_tests(self, program, continue_after_failure=False) -> List[dict]:
+    def execute_tests(self, program ) -> List[dict]:
         failures = []
         for run in self.tests:
             source_input, follow_up_input, other_inputs, output, independence = run
             control = program(**(other_inputs | source_input))[output]
             treatment = program(**(other_inputs | follow_up_input))[output]
-            try:
-                self.assertion(control, treatment, run)
-            except AssertionError as e:
-                print(e)
-                if not continue_after_failure:
-                    sys.exit(1)
-                else:
-                    failures.append({
-                        "source_inputs": (other_inputs | source_input),
-                        "source_outcome": control,
-                        "follow_up_inputs": (other_inputs | follow_up_input),
-                        "follow_up_outcome": treatment
-                    })
+            if not self.assertion(control, treatment, run):
+                failures.append({
+                    "source_inputs": (other_inputs | source_input),
+                    "source_outcome": control,
+                    "follow_up_inputs": (other_inputs | follow_up_input),
+                    "follow_up_outcome": treatment
+                })
+
+            # try:
+            #     self.assertion(control, treatment, run)
+            # except AssertionError as e:
+            #     print(e)
+            #     if not continue_after_failure:
+            #         sys.exit(1)
+            #     else:
+            #         failures.append({
+            #             "source_inputs": (other_inputs | source_input),
+            #             "source_outcome": control,
+            #             "follow_up_inputs": (other_inputs | follow_up_input),
+            #             "follow_up_outcome": treatment
+            #         })
+
         return failures
 
     @abstractmethod
     def assertion(self, source_output, follow_up_output, run):
+        """An assertion that is to be applied to an individual metamorphic test run."""
+        ...
+
+    @abstractmethod
+    def oracle(self, test_failures):
+        """An oracle procedure that determines whether the MR holds or not based on the test failures."""
         ...
 
 
@@ -102,8 +117,12 @@ class ShouldCause(CausalMetamorphicRelation):
     """
 
     def assertion(self, source_output, follow_up_output, run):
-        assert source_output != follow_up_output,\
-            f"Expected source output {source_output} NOT to equal follow-up output {follow_up_output} for\n{run}"
+        return source_output != follow_up_output
+        # assert source_output != follow_up_output,\
+        #     f"Expected source output {source_output} NOT to equal follow-up output {follow_up_output} for\n{run}"
+
+    def oracle(self, test_failures):
+        assert len(test_failures) < len(self.tests), f"{str(self)}: {len(test_failures)}/{len(self.tests)} tests failed."
 
     def __str__(self):
         metamorphic_relation_str = f"{self.input_var} --> {self.output_var}"
@@ -121,8 +140,12 @@ class ShouldNotCause(CausalMetamorphicRelation):
     """
     
     def assertion(self, source_output, follow_up_output, run):
-        assert source_output == follow_up_output,\
-            f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
+        return source_output == follow_up_output
+        # assert source_output == follow_up_output,\
+        #     f"Expected source output {source_output} to equal follow-up output {follow_up_output} for\n{run}"
+
+    def oracle(self, test_failures):
+        assert len(test_failures) == 0, f"{str(self)} failed: {len(test_failures)} tests failed."
 
     def __str__(self):
         metamorphic_relation_string = f"{self.input_var} _||_ {self.output_var}"
