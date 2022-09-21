@@ -6,16 +6,6 @@ import mccabe as mc
 import ast
 
 
-def relation_passed(outcome):
-    # Independence relations - Fails if any test failed
-    if "_||_" in outcome["relation"]:
-        return len(outcome["failures"]) == 0
-    # Dependence relations - Fails if all tests failed
-    elif "-->" in outcome["relation"]:
-        return len(outcome["failures"]) < outcome["total"]
-    else:
-        raise ValueError(f"Invalid outcome relation {outcome['relation']}. Expected '_||_' or '-->'")
-
 def get_mccabe_complexity(program_path):
     """Get McCabe complexity for a program using Ned's script: https://github.com/PyCQA/mccabe.
 
@@ -84,21 +74,11 @@ for dag in dags:
     # Negative - Didn't catch a bug (i.e. test outcome = passed)
 
     datum["jobs"] = {job: {} for job in results}
-    baseline_failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results["baseline"]["test_outcomes"] for test in relation["failures"]]
-    baseline_failed_relations = [result['relation'] for result in results["baseline"]["test_outcomes"] if not relation_passed(result)]
-    datum["jobs"]["baseline"]["positive_tests"] = len(baseline_failed_tests)
+    # baseline_failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results["baseline"]["test_outcomes"] for test in relation["failures"]]
+    baseline_failed_relations = [result['relation'] for result in results["baseline"]["test_outcomes"] if not result["passed"]]
+    # datum["jobs"]["baseline"]["positive_tests"] = len(baseline_failed_tests)
     datum["jobs"]["baseline"]["positive_relations"] = len(baseline_failed_relations)
 
-
-    # Metamorphic Relations
-    # Passed baseline - Failed on mutant
-    datum['true_positive_relations'] = 0
-    # Failed on baseline - Failed on mutant
-    datum['false_positive_relations'] = 0
-    # Passed baseline - Passed mutant
-    datum['true_negative_relations'] = 0
-    # Failed baseline - Passed mutant
-    datum['false_negative_relations'] = 0
 
     datum["num_jobs"] = len(results)
 
@@ -107,38 +87,33 @@ for dag in dags:
             continue
 
         # Positive
-        failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results[job]["test_outcomes"] for test in relation["failures"]]
-        failed_relations = [relation["relation"] for relation in results[job]["test_outcomes"] if not relation_passed(relation)]
+        # failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results[job]["test_outcomes"] for test in relation["failures"]]
+        failed_relations = [relation["relation"] for relation in results[job]["test_outcomes"] if not relation["passed"]]
 
         # Passed baseline - Failed on mutant
         # True positive - i.e. mutant finders
-        datum["jobs"][job]['true_positive_tests'] = len(set(failed_tests).difference(baseline_failed_tests))
+        # datum["jobs"][job]['true_positive_tests'] = len(set(failed_tests).difference(baseline_failed_tests))
         datum["jobs"][job]['true_positive_relations'] = len(set(failed_relations).difference(baseline_failed_relations))
 
         # Failed on baseline - Failed on mutant
         # False positive - i.e. DAG misspecification finders
-        datum["jobs"][job]['false_positive_tests'] = len(set(failed_tests).intersection(baseline_failed_tests))
+        # datum["jobs"][job]['false_positive_tests'] = len(set(failed_tests).intersection(baseline_failed_tests))
         datum["jobs"][job]['false_positive_relations'] = len(set(failed_relations).intersection(baseline_failed_relations))
 
         # Passed baseline - Passed mutant
         # True Negatives - i.e. unaffected by misspecification or mutation
         total_tests = sum([result["total"] for result in results[job]["test_outcomes"]])
         total_relations = len(results[job]["test_outcomes"])
-        datum["jobs"][job]["true_negative_tests"] = total_tests - len(set(baseline_failed_tests).union(failed_tests))
+        # datum["jobs"][job]["true_negative_tests"] = total_tests - len(set(baseline_failed_tests).union(failed_tests))
         datum["jobs"][job]["true_negative_relations"] = total_relations - len(set(baseline_failed_relations).union(failed_relations))
-        print(job)
-        print(total_relations, "total_relations")
-        print(sorted(baseline_failed_relations), len(baseline_failed_relations), "baseline_failed_relations")
-        print(sorted(failed_relations), len(failed_relations), "failed_relations")
-        print(sorted(list(set(baseline_failed_relations).union(failed_relations))), len(list(set(baseline_failed_relations).union(set(failed_relations)))), "union")
         assert len(set(baseline_failed_relations).union(failed_relations)) <= total_relations
 
 
         # Failed baseline - Passed mutant
         # False Negatives - i.e. mutant obfuscators
-        datum["jobs"][job]["false_negative_tests"] = len(set(baseline_failed_tests).difference(failed_tests))
+        # datum["jobs"][job]["false_negative_tests"] = len(set(baseline_failed_tests).difference(failed_tests))
         datum["jobs"][job]["false_negative_relations"] = len(set(baseline_failed_relations).difference(failed_relations))
     data.append(datum)
 
 with open(os.path.join(args.seed, "results.json"), 'w') as f:
-    print(json.dumps(data), file=f)
+    print(json.dumps(data, indent=2), file=f)
