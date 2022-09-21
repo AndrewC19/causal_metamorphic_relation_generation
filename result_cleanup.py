@@ -30,8 +30,6 @@ parser.add_argument('-o',
                     required=True,
                     )
 args = parser.parse_args()
-
-
 con = sqlite3.connect("mutation_config.sqlite")
 mutation_specs = pd.read_sql_query("SELECT * from mutation_specs", con, index_col="job_id")
 work_results = pd.read_sql_query("SELECT * from work_results", con, index_col="job_id")

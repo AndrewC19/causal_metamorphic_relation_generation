@@ -67,7 +67,7 @@ for dag in dags:
 
     total_tests = sum([relation["total"] for relation in results["baseline"]["test_outcomes"]])
     datum["total_tests"] = total_tests
-
+    datum["n_tests"] = results["baseline"]["test_outcomes"][0]["total"]
     # True - Passed baseline
     # False - Failed baseline
     # Positive - Caught a bug (i.e. test outcome = failed)
@@ -116,4 +116,5 @@ for dag in dags:
     data.append(datum)
 
 with open(os.path.join(args.seed, "results.json"), 'w') as f:
+    print(data)
     print(json.dumps(data, indent=2), file=f)
