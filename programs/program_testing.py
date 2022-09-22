@@ -4,7 +4,6 @@ import importlib
 import json
 from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 
-
 parser = argparse.ArgumentParser(
     description="Parses args"
 )
@@ -55,7 +54,7 @@ if args.seed is not None:
 
 results = []
 for relation in generate_metamorphic_relations(dag):
-    result = {"relation": str(relation), "total": 0, "failures": []}
+    result = {"relation": str(relation), "total": 0, "failed": False}
     relation.generate_tests(seed=seed, sample_size=sample_size)
     result["total"] += len(relation.tests)
     failures = relation.execute_tests(program.program)
@@ -64,17 +63,16 @@ for relation in generate_metamorphic_relations(dag):
     except AssertionError as e:
         print(e)
         # Only add failures that result in MR failing (i.e. if all tests fail for --> and if one test fails for _||_)
-        result["failures"] += failures
+        result["failed"] = True
     results.append(result)
 
 
 def get_failures(results_dict):
-    failures = {"relation": [], "result": []}
-    for result in results_dict:
-        if len(result["failures"]) > 0:
-            failures["relation"].append(result["relation"])
-            failures["result"].append(result["failures"])
-    return failures
+    failed_relations = []
+    for relation_result in results_dict:
+        if relation_result["failed"]:
+            failed_relations.append(relation_result["relation"])
+    return failed_relations
 
 
 if args.outfile is not None:
@@ -82,4 +80,5 @@ if args.outfile is not None:
         print(json.dumps(results), file=f)
 
 if args.continue_:
-    assert all([len(result['failures']) == 0 for result in results]), f"Test Failures: {get_failures(results)}"
+    assert all([not result['failed'] for result in results]),\
+        f"Failed MRs: {get_failures(results)}"

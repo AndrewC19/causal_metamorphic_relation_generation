@@ -126,7 +126,7 @@ class ShouldNotCause(CausalMetamorphicRelation):
         return source_output == follow_up_output
 
     def oracle(self, test_failures):
-        assert len(test_failures) == 0, f"{str(self)} failed: {len(test_failures)} tests failed."
+        assert len(test_failures) == 0, f"{str(self)} failed: {len(test_failures)}/{len(self.tests)} tests failed."
 
     def __str__(self):
         metamorphic_relation_string = f"{self.input_var} _||_ {self.output_var}"

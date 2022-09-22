@@ -41,6 +41,10 @@ structural_hamming_distance = None
 
 data = []
 for dag in dags:
+
+    if "dag" not in dag:
+        # Skip any non dag directories (e.g. .DS_Store)
+        continue
     datum = {"dag": dag}
     datum["mccabe"] = get_mccabe_complexity(os.path.join(args.seed, "program.py"))
 
@@ -65,17 +69,18 @@ for dag in dags:
     datum["p_invert_edge"] = p_invert_edge
     datum["structural_hamming_distance"] = structural_hamming_distance
 
-    total_tests = sum([relation["total"] for relation in results["baseline"]["test_outcomes"]])
-    datum["total_tests"] = total_tests
-    datum["n_tests"] = results["baseline"]["test_outcomes"][0]["total"]
+    # total_tests = sum([relation["total"] for relation in results["baseline"]["test_outcomes"]])
+    datum["total_tests"] = results["baseline"]["total_tests"]
+    datum["n_tests"] = results["baseline"]["n_tests"]
     # True - Passed baseline
     # False - Failed baseline
     # Positive - Caught a bug (i.e. test outcome = failed)
     # Negative - Didn't catch a bug (i.e. test outcome = passed)
 
     datum["jobs"] = {job: {} for job in results}
+    print(results['baseline'].keys())
     # baseline_failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results["baseline"]["test_outcomes"] for test in relation["failures"]]
-    baseline_failed_relations = [result['relation'] for result in results["baseline"]["test_outcomes"] if not result["passed"]]
+    baseline_failed_relations = results["baseline"]["failed_relations"]
     # datum["jobs"]["baseline"]["positive_tests"] = len(baseline_failed_tests)
     datum["jobs"]["baseline"]["positive_relations"] = len(baseline_failed_relations)
 
@@ -88,7 +93,8 @@ for dag in dags:
 
         # Positive
         # failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results[job]["test_outcomes"] for test in relation["failures"]]
-        failed_relations = [relation["relation"] for relation in results[job]["test_outcomes"] if not relation["passed"]]
+        print(results[job].keys())
+        failed_relations = results[job]["failed_relations"]
 
         # Passed baseline - Failed on mutant
         # True positive - i.e. mutant finders
@@ -102,8 +108,8 @@ for dag in dags:
 
         # Passed baseline - Passed mutant
         # True Negatives - i.e. unaffected by misspecification or mutation
-        total_tests = sum([result["total"] for result in results[job]["test_outcomes"]])
-        total_relations = len(results[job]["test_outcomes"])
+        total_tests = results["baseline"]["total_tests"]
+        total_relations = results["baseline"]["total_relations"]
         # datum["jobs"][job]["true_negative_tests"] = total_tests - len(set(baseline_failed_tests).union(failed_tests))
         datum["jobs"][job]["true_negative_relations"] = total_relations - len(set(baseline_failed_relations).union(failed_relations))
         assert len(set(baseline_failed_relations).union(failed_relations)) <= total_relations

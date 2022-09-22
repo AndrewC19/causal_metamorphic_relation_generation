@@ -4,7 +4,7 @@ sed -i '' -e "s/-t.*/-t $2\"/" mutation_config.toml
 cosmic-ray init ./mutation_config.toml ./mutation_config.sqlite
 cosmic-ray --verbosity=INFO baseline ./mutation_config.toml
 cosmic-ray exec ./mutation_config.toml ./mutation_config.sqlite
-cr-html ./mutation_config.sqlite > report.html
+#cr-html ./mutation_config.sqlite > report.html
 python ../../../../../result_cleanup.py -r . -o results.json
 #python ../../../../../process_seed_results.py -s $1
 ## echo "[" > mutation_config.json
