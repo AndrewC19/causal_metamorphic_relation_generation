@@ -33,6 +33,11 @@ parser.add_argument('-r',
                     help="Results file name (without .json).",
                     required=True,
                     )
+parser.add_argument('-t',
+                    '--tests',
+                    help="Number of tests used to produce seed results.",
+                    required=True,
+                    )
 args = parser.parse_args()
 
 dags_dir = os.path.join(args.seed, "dags")
@@ -53,7 +58,7 @@ for dag in dags:
     datum = {"dag": dag}
     datum["mccabe"] = get_mccabe_complexity(os.path.join(args.seed, "program.py"))
 
-    with open(os.path.join(dags_dir, dag, f"{args.results}.json")) as f:
+    with open(os.path.join(dags_dir, dag, args.results)) as f:
         results = json.load(f)
     graph = pydot.graph_from_dot_file(os.path.join(dags_dir, dag, "DAG.dot"))[0]
     datum['dag_nodes'] = len(graph.get_nodes())
@@ -83,7 +88,6 @@ for dag in dags:
     # Negative - Didn't catch a bug (i.e. test outcome = passed)
 
     datum["jobs"] = {job: {} for job in results}
-    print(results['baseline'].keys())
     # baseline_failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results["baseline"]["test_outcomes"] for test in relation["failures"]]
     baseline_failed_relations = results["baseline"]["failed_relations"]
     # datum["jobs"]["baseline"]["positive_tests"] = len(baseline_failed_tests)
@@ -98,7 +102,6 @@ for dag in dags:
 
         # Positive
         # failed_tests = [tuple(sorted(list(test["source_inputs"].items()))) for relation in results[job]["test_outcomes"] for test in relation["failures"]]
-        print(results[job].keys())
         failed_relations = results[job]["failed_relations"]
 
         # Passed baseline - Failed on mutant
@@ -126,7 +129,6 @@ for dag in dags:
         datum["jobs"][job]["false_negative_relations"] = len(set(baseline_failed_relations).difference(failed_relations))
     data.append(datum)
 
-with open(os.path.join(args.seed, f"{args.results}.json"), 'w') as f:
-    print(data)
+with open(os.path.join(args.seed, f"results_{args.tests}.json"), 'w') as f:
     print(json.dumps(data, indent=2), file=f)
 
