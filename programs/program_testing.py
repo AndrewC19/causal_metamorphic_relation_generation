@@ -2,7 +2,7 @@ import argparse
 import networkx as nx
 import importlib
 import json
-from helpers import safe_open_w
+import os
 from metamorphic_relations.metamorphic_relation_generation import generate_metamorphic_relations
 
 parser = argparse.ArgumentParser(
@@ -77,7 +77,7 @@ def get_failures(results_dict):
 
 
 if args.outfile is not None:
-    with safe_open_w(args.outfile) as f:
+    with open(args.outfile, 'w') as f:
         print(json.dumps(results), file=f)
 
 if args.continue_:
