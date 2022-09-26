@@ -69,7 +69,7 @@ class CausalMetamorphicRelation(ABC):
             )
         )
 
-    def execute_tests(self, program ) -> List[dict]:
+    def execute_tests(self, program) -> List[dict]:
         failures = []
         for run in self.tests:
             source_input, follow_up_input, other_inputs, output, independence = run

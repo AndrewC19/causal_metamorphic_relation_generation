@@ -46,7 +46,7 @@ for job in os.listdir(args.results):
         continue
     job_id = job[:-5]
     result = {}
-    with open(job) as f:
+    with open(os.path.join(args.results, job)) as f:
         # result["test_outcomes"] = json.load(f)
         test_outcomes = json.load(f)
         results[job_id] = {}
