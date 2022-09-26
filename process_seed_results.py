@@ -28,6 +28,11 @@ parser.add_argument('-s',
                     help="Path to seed folder.",
                     required=True,
                     )
+parser.add_argument('-r',
+                    '--results',
+                    help="Results file name (without .json).",
+                    required=True,
+                    )
 args = parser.parse_args()
 
 dags_dir = os.path.join(args.seed, "dags")
@@ -48,7 +53,7 @@ for dag in dags:
     datum = {"dag": dag}
     datum["mccabe"] = get_mccabe_complexity(os.path.join(args.seed, "program.py"))
 
-    with open(os.path.join(dags_dir, dag, "results.json")) as f:
+    with open(os.path.join(dags_dir, dag, f"{args.results}.json")) as f:
         results = json.load(f)
     graph = pydot.graph_from_dot_file(os.path.join(dags_dir, dag, "DAG.dot"))[0]
     datum['dag_nodes'] = len(graph.get_nodes())
@@ -121,6 +126,7 @@ for dag in dags:
         datum["jobs"][job]["false_negative_relations"] = len(set(baseline_failed_relations).difference(failed_relations))
     data.append(datum)
 
-with open(os.path.join(args.seed, "results.json"), 'w') as f:
+with open(os.path.join(args.seed, f"{args.results}.json"), 'w') as f:
     print(data)
     print(json.dumps(data, indent=2), file=f)
+

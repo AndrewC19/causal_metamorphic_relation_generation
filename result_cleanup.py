@@ -24,20 +24,25 @@ parser.add_argument('-r',
                     help="Path to results folder.",
                     required=True,
                     )
+parser.add_argument('-db',
+                    '--database',
+                    help="Name of mutation configuration database (sqlite file).",
+                    required=True,
+                    )
 parser.add_argument('-o',
                     '--outfile',
                     help="Location to save the outfile.",
                     required=True,
                     )
 args = parser.parse_args()
-con = sqlite3.connect("mutation_config.sqlite")
+con = sqlite3.connect(args.database)
 mutation_specs = pd.read_sql_query("SELECT * from mutation_specs", con, index_col="job_id")
 work_results = pd.read_sql_query("SELECT * from work_results", con, index_col="job_id")
 con.close()
 
 results = {}
 for job in os.listdir(args.results):
-    if not job.endswith(".json") or job.endswith("mutation_config.json") or "results" in job:
+    if not job.endswith(".json") or "mutation_config" in job or "results" in job:
         continue
     job_id = job[:-5]
     result = {}
