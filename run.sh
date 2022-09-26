@@ -11,6 +11,7 @@
 cd $1
 mkdir "t${2}"
 cp mutation_config.toml "./t${2}/mutation_config.toml"
+cp ../../program.py "./t${2}/program.py"
 cd "t${2}"
 #rm *.sqlite report.html *.json
 sed -i '' -e "s/-t.*/-t $2\"/" mutation_config.toml
