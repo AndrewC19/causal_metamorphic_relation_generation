@@ -27,14 +27,17 @@ def generate_program(
     :param program_name: The name the program will be saved as (excluding the .py extension).
     :param seed: The seed to fix the non-deterministic behaviour.
     """
-    if seed:
+    if seed is not None:
         random.seed(seed)
+
+    coin_flip = random.random()
+    print(coin_flip)
 
     # With p_conditional probability, convert all non-terminal nodes to conditional type
     nodes_with_types = {}
     for node in causal_dag.nodes:
         n_type = "numerical"
-        if (causal_dag.out_degree(node) > 0) and (random.random() < p_conditional):
+        if (causal_dag.out_degree(node) > 0) and (coin_flip < p_conditional):
             n_type = "conditional"
         nodes_with_types[node] = {"n_type": n_type}
     nx.set_node_attributes(causal_dag, nodes_with_types)
@@ -50,7 +53,7 @@ def generate_program(
     pg_start_time = time()
     statement_stack = construct_statement_stack_from_dag(causal_dag)
     pg_end_time = time()
-    print(f"Program Generation Time: {pg_end_time - pg_start_time}s")
+    # print(f"Program Generation Time: {pg_end_time - pg_start_time}s")
 
     # Write the program
     format_start_time = time()
@@ -63,13 +66,13 @@ def generate_program(
         program_name,
     )
     format_end_time = time()
-    print(f"Format time: {format_end_time - format_start_time}s")
+    # print(f"Format time: {format_end_time - format_start_time}s")
     program_path = os.path.join(target_directory_path, f"{program_name}.py")
 
     # Compute the McCabe complexity: we subtract number of outputs since each computation
     # has a superfluous if statement that allows us to directly intervene on output values
     mccabe_complexity = get_mccabe_complexity(program_path) - len(output_nodes)
-    print(f"McCabe complexity: {mccabe_complexity}")
+    # print(f"McCabe complexity: {mccabe_complexity}")
 
 
 def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
@@ -252,4 +255,6 @@ def get_mccabe_complexity(program_path):
 
 if __name__ == "__main__":
     dag = generate_dag(30, 0.5, 0.25)
-    generate_program(dag, 0.67, target_directory_path="../buggy_progs/", program_name="program")
+    for _ in range(10):
+        generate_program(dag, 0.67, target_directory_path="../buggy_progs/",
+                         program_name="program")

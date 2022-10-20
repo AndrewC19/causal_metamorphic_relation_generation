@@ -40,7 +40,7 @@ def generate_dag(
     :param dot_path: An optional path to save a DOT file.
     return: A string containing a DOT causal DAG.
     """
-    if seed:
+    if seed is not None:
         random.seed(seed)
 
     # Create an Erdos-Renyi graph with n_nodes nodes and p_edge probability of edge creation
@@ -92,7 +92,7 @@ def mutate_dag(
     :param seed: Random seed to control non-determinism.
     is inverted.
     """
-    if seed:
+    if seed is not None:
         random.seed(seed)
 
     dag_to_mutate = causal_dag.copy()
