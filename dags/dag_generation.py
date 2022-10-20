@@ -79,7 +79,7 @@ def mutate_dag(
         causal_dag: nx.DiGraph,
         p_invert_edge: float,
         out_path: str = None,
-        seed: int = 0
+        seed: int = None
 ):
     """Invert potential edges in the causal DAG with a specified probability.
 
@@ -92,7 +92,9 @@ def mutate_dag(
     :param seed: Random seed to control non-determinism.
     is inverted.
     """
-    random.seed(seed)
+    if seed:
+        random.seed(seed)
+
     dag_to_mutate = causal_dag.copy()
     non_causal_node_pairs = get_non_causal_node_pairs(dag_to_mutate)
     invertible_node_pairs = list(dag_to_mutate.edges) + non_causal_node_pairs

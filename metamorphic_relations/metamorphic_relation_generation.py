@@ -3,6 +3,7 @@ import networkx as nx
 from itertools import combinations
 from metamorphic_relations.metamorphic_relation import ShouldCause, ShouldNotCause
 from dags.dag_generation import generate_dag
+from dags.dag_utils import from_dot
 
 
 def generate_metamorphic_relations(dag: nx.DiGraph):
@@ -34,7 +35,10 @@ def generate_metamorphic_relations(dag: nx.DiGraph):
             adjustment_set -= {effect}  # Remove the effect from adjustment set, where effect --> cause
             metamorphic_relations.append(ShouldCause(effect, cause, list(adjustment_set - {effect}), dag))
         else:
-            cause, effect = sort_node_pair(cause, effect)
+            try:
+                cause, effect = sort_node_pair(cause, effect)
+            except ValueError:
+                cause, effect = cause, effect  # Can't sort the nodes (not X, Y format)
             metamorphic_relations.append(ShouldNotCause(cause, effect, list(adjustment_set), dag))
 
     return metamorphic_relations
@@ -55,6 +59,8 @@ def sort_node_pair(node_a, node_b):
 
 
 if __name__ == "__main__":
-    causal_dag = generate_dag(20, 1)
+    # causal_dag = generate_dag(20, 1, 0.5)
+    causal_dag = from_dot("../fastDateFormatter.dot")
     causal_dag_metamorphic_relations = generate_metamorphic_relations(causal_dag)
+
     print(causal_dag_metamorphic_relations)

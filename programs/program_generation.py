@@ -14,7 +14,8 @@ def generate_program(
         causal_dag: nx.DiGraph,
         p_conditional: float = 0.0,
         target_directory_path: str = "./synthetic_programs",
-        program_name: str = "synthetic_program"
+        program_name: str = "synthetic_program",
+        seed: int = None
 ):
     """Generate an arithmetic python program with the same causal structure as the provided causal DAG.
 
@@ -24,8 +25,10 @@ def generate_program(
                           statement.
     :param target_directory_path: The path of the directory to which the program will be saved.
     :param program_name: The name the program will be saved as (excluding the .py extension).
+    :param seed: The seed to fix the non-deterministic behaviour.
     """
-    random.seed(0)
+    if seed:
+        random.seed(seed)
 
     # With p_conditional probability, convert all non-terminal nodes to conditional type
     nodes_with_types = {}
@@ -248,5 +251,5 @@ def get_mccabe_complexity(program_path):
 
 
 if __name__ == "__main__":
-    dag = generate_dag(5, 0.3)
-    generate_program(dag, 0.67, target_directory_path="../evaluation/", program_name="test_program")
+    dag = generate_dag(30, 0.5, 0.25)
+    generate_program(dag, 0.67, target_directory_path="../buggy_progs/", program_name="program")

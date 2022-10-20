@@ -61,7 +61,8 @@ def generate_experiment(
             dag.copy(),
             p_conditional=p_conditional,
             target_directory_path=seed_dir_path,
-            program_name="program"
+            program_name="program",
+            seed=seed
         )
         p_g_end_time = time()
         print(f"Program generation run time: {p_g_end_time - p_g_start_time}")
