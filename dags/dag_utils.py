@@ -1,5 +1,6 @@
 """A library of utility functions for causal DAGs."""
 import networkx as nx
+import networkx.drawing.nx_pydot
 from networkx.drawing.nx_pydot import to_pydot
 from itertools import combinations
 from helpers import safe_open_w
@@ -99,6 +100,15 @@ def to_dot(dag: nx.DiGraph, out_path: str, **kwargs):
         dot_dag = dot_dag[:-3] + "}"  # Fixes networkx bug that adds newline to nodes
         dag_file.write(dot_dag)
 
+
+def from_dot(path_to_dot_graph):
+    """Load a dot specification of a DAG to a networkx DiGraph.
+
+    :param path_to_dot_graph: Path to the DOT file specifying the DAG.
+    :return: A networkx digraph object with the specified causal structure.
+    """
+    dag = networkx.drawing.nx_pydot.read_dot(path_to_dot_graph)
+    return dag
 
 def get_output_order(causal_dag: nx.DiGraph):
     """Gets the order of the outputs as they appear in the source code.
