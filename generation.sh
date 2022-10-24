@@ -7,9 +7,9 @@ module load Anaconda3/5.3.0
 
 # We assume that the conda environment 'venv' has already been created
 source activate venv
-for nn in {20,}
+for nn in {30,}
 do
-  for pe in {0.25,0.5}
+  for pe in {0.25,}
   do
     for pc in {0.25,0.5,0.75,1}
     do
