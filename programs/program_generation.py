@@ -30,14 +30,12 @@ def generate_program(
     if seed is not None:
         random.seed(seed)
 
-    coin_flip = random.random()
-    print(coin_flip)
-
-    # With p_conditional probability, convert all non-terminal nodes to conditional type
     nodes_with_types = {}
     for node in causal_dag.nodes:
         n_type = "numerical"
-        if (causal_dag.out_degree(node) > 0) and (coin_flip < p_conditional):
+        coin_flip = random.random()
+        # Get all nodes with at least one cause
+        if (causal_dag.in_degree(node) > 0) and (coin_flip < p_conditional):
             n_type = "conditional"
         nodes_with_types[node] = {"n_type": n_type}
     nx.set_node_attributes(causal_dag, nodes_with_types)
@@ -71,7 +69,7 @@ def generate_program(
 
     # Compute the McCabe complexity: we subtract number of outputs since each computation
     # has a superfluous if statement that allows us to directly intervene on output values
-    mccabe_complexity = get_mccabe_complexity(program_path) - len(output_nodes)
+    # mccabe_complexity = get_mccabe_complexity(program_path) - len(output_nodes)
     # print(f"McCabe complexity: {mccabe_complexity}")
 
 
@@ -100,13 +98,18 @@ def construct_statement_stack_from_dag(causal_dag: nx.DiGraph):
 
         # Add if not none before each output statement for controllability
         statement = f"\tif {output_node} is None:\n"
-        conditional_parents = [cause for cause in causes if causal_dag.nodes[cause]["n_type"] == "conditional"]
 
         # Add conditional behaviour for conditional nodes
-        if conditional_parents:
+        if causal_dag.nodes[output_node]["n_type"] == "conditional":
+
+            # Take a random subset (comprising at least one node) of the conditional node's parents
+            n_causes_to_sample = random.randint(1, len(causes))
+            causes_to_include_in_predicate = random.sample(causes, n_causes_to_sample)
+
             # Place the linear equation within an if statement whose predicate is a function of all conditional causes
-            predicate = generate_predicate(conditional_parents)
-            if_body_statement, else_body_statement = generate_if_else_body(output_node, causes, conditional_parents)
+            predicate = generate_predicate(causes_to_include_in_predicate)
+            if_body_statement, else_body_statement = generate_if_else_body(output_node, causes,
+                                                                           causes_to_include_in_predicate)
             statement += predicate
             statement += if_body_statement
             statement += f"\t\telse:\n"
@@ -255,6 +258,8 @@ def get_mccabe_complexity(program_path):
 
 if __name__ == "__main__":
     dag = generate_dag(30, 0.5, 0.25)
-    for _ in range(10):
-        generate_program(dag, 0.67, target_directory_path="../buggy_progs/",
+    for _ in range(1):
+        generate_program(dag,
+                         1,
+                         target_directory_path="../buggy_progs/",
                          program_name="program")
