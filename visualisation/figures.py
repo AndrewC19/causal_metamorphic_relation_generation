@@ -44,7 +44,6 @@ def plot_robustness_to_conditional_complexity_from_csv(results_csv_path):
      + labs(x="McCabe Complexity Score",
             y="Mutation Score",
             title="Robustness to A2 with 20 node CSGs")
-     + theme(text=element_text(size=20))
      + scale_y_continuous(limits=(0.4, 1))
      + scale_color_discrete(guide=False)).save(filename="RQ2.pdf",
                                                path="../figures",
